@@ -75,10 +75,10 @@ def xor_decrypt(message_chiffre):
 
 
 
-    ## écriture de la clé dans un fichier
+    ## écriture du message déchiffré dans un fichier
 
-    ## lecture du fichier et comparaison avec une wordlist en comptant le nb d'occurences
-    ## la ligne qui aura match le plus de fois avec la wordlist correspondra au message de base
+    ## lecture du fichier ligne par ligne et comparaison avec une wordlist en comptant le nb d'occurences
+    ## la ligne qui aura match le plus de fois avec la wordlist correspondra au message en clair de base
 
 
     #endfor
