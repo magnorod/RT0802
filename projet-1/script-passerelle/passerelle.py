@@ -13,7 +13,7 @@ class MonThread (threading.Thread):
         print("THREAD:donnees="+str(self.donnees))
         #conversion du dictionnaire en json
         donneesJson = json.dumps(self.donnees)
-        cmd1="mosquitto_pub -h 10.22.135.65 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
+        cmd1="mosquitto_pub -h 172.32.0.4 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
         os.system(cmd1)
         print("THREAD: cmd1="+str(cmd1))
         print("THREAD:denm envoyé au centralisateur")
@@ -40,8 +40,7 @@ def on_denm(client, userdata, msg):
     print("donnees:"+str(donnees))
     stationType=int(donnees["stationType"])
     print("stationType:"+str(stationType))
-    ## tout évènement provenant d'un opérateur routier est remonté au
-    centralisateur
+    ## tout évènement provenant d'un opérateur routier est remonté au centralisateur
     if stationType == 15:
         #remonter info à passerelle
         print("lancement du thread")

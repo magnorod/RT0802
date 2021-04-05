@@ -123,7 +123,7 @@ if __name__ == '__main__' :
 
     stationId=gen_stationId()
     stationType_tab=(5,10,15)
-    ip_server_mqtt="10.22.135.34"
+    ip_server_mqtt="172.29.0.3"
     frequence_cam=0
     longitude_base= 4.0333
     latitude_base=49.25
