@@ -1,0 +1,64 @@
+.p
+{
+	font-style : oblique; 
+	color : red;
+}
+
+.h3
+{
+	font-style : oblique;
+	font-weight : 900;
+}
+
+.fond
+{
+	text-align : left;
+	background-color : red;
+}
+
+
+#titre
+{
+	color : red;
+}
+
+
+#image
+{
+	position: static;
+	height : 5%;
+	width : 100%;
+}
+
+#voiture
+
+{
+	height : 100px;
+	width : 150px;
+}
+
+#text
+{
+
+	font-size : 150%;
+	text-align : center;	
+}
+
+
+#categorie
+{
+	text-align : center;	
+}
+
+
+#text
+{
+	
+
+}
+
+.pied
+{
+	position : static;
+	text-align : center;
+}

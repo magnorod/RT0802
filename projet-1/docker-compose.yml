@@ -1,0 +1,24 @@
+services:
+  vehicule:
+    build: .
+      network: host
+    volumes:
+      - script-vehicule:/code-projet
+    links:
+      - alpine-rt802
+  passerelle:
+    build: .
+      network: host
+    volumes:
+      - script-passerelle:/code-projet
+    links:
+      - alpine-rt802
+  centralisateur:
+    build: .
+      network: host
+    volumes:
+      - script-centraisateur:/code-projet
+    links:
+      - alpine-rt802
+  alpine-rt802:
+    image: alpine-rt802

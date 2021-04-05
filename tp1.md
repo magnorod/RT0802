@@ -364,4 +364,5 @@ coefficient:
 ```
 modulus correspond au modulo, exposants= la puissance, prime = nb premier
 
-l'exposant
+
+l'exposant publique vaut 65537 dans le but d ’accélérer les calculs informatiques. En effet, 65537 = (2**16) + 1, c’est-`a-dire que sa représentation binaire n’a que deux uns et nécessite peu de multiplications lors de son exponentiation. C’est la raison pour laquelle l’exposant public est 65537.
