@@ -2,7 +2,7 @@ services:
   vehicule:
     image: rt802-alpine
     build: .
-    shm_size: '1gb'
+    #shm_size: '1gb'
     container_name: rt802-vehicule
     hostname: rt802-vehicule
     stdin_open: true 
@@ -14,7 +14,7 @@ services:
         ipv4_address: "172.32.0.2"
   passerelle:
     image: rt802-alpine
-    shm_size: '1gb'
+    #shm_size: '1gb'
     container_name: rt802-passerelle
     hostname: rt802-passerelle
     stdin_open: true
@@ -26,7 +26,7 @@ services:
         ipv4_address: "172.32.0.3"
   centralisateur:
     image: rt802-alpine
-    shm_size: '1gb'
+    #shm_size: '1gb'
     container_name: rt802-centralisateur
     hostname: rt802-centralisateur
     stdin_open: true
@@ -42,7 +42,7 @@ volumes:
   script-centralisateur:
 
 networks:
- reseau1:
+  reseau1:
     driver: bridge
     ipam:
       config:
