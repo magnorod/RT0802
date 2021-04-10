@@ -13,7 +13,7 @@ class MonThread (threading.Thread):
         print("THREAD:donnees="+str(self.donnees))
         #conversion du dictionnaire en json
         donneesJson = json.dumps(self.donnees)
-        cmd1="mosquitto_pub -h 172.32.0.4 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
+        cmd1="mosquitto_pub -h 192.168.0.54 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
         os.system(cmd1)
         print("THREAD: cmd1="+str(cmd1))
         print("THREAD:denm envoyé au centralisateur")
@@ -119,7 +119,7 @@ if __name__ == "__main__":
 
     client.message_callback_add("cam/#", on_cam)
     client.message_callback_add("denm/#", on_denm)
-    client.connect("localhost", 1883, 60)
+    client.connect('127.0.0.1', 1883, 60)
 
     client.subscribe("cam/auto")
     client.subscribe("cam/moto")

@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 import random
 import time
 import os
@@ -43,7 +42,6 @@ def gen_json_denm(stationId,stationType,cause,sub_cause,latitude,longitude,times
 
 #endef
 
-
 def gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp):
 
     # génération heading
@@ -61,9 +59,12 @@ def gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,
         topic="camion"
 
     cmd1="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(msg_cam)+"'" 
+    print(cmd1)
+
     os.system(cmd1)
     print("\n")
 
+    
     return msg_cam
 
 #endef
@@ -111,6 +112,7 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
     #endif
 
     cmd1="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t denm/"+str(topic)+" -m '"+str(msg_denm)+"'"
+    print(cmd1)
     os.system(cmd1)
 
     return msg_denm
@@ -123,7 +125,7 @@ if __name__ == '__main__' :
 
     stationId=gen_stationId()
     stationType_tab=(5,10,15)
-    ip_server_mqtt="172.29.0.3"
+    ip_server_mqtt="192.168.1.21"
     frequence_cam=0
     longitude_base= 4.0333
     latitude_base=49.25
