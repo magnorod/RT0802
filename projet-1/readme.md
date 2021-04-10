@@ -19,11 +19,12 @@
 
 ### Véhicule & Passerelle :
 
-* génère une paire de clé RSA 2048
-* envoi sa clé publique à l'autorité de certification
+* génèrer une paire de clés RSA 2048
+* envoyer sa clé publique à l'autorité de certification
 
 ### Autorité de certification:
-* attend de recevoir une clé publique
+* générer une paire de clés RSA 2048
+* attendre de recevoir une clé publique d'un véhicule ou de la passerelle
 * à la réception de la clé publique, création d'un certificat X509 (clé publique reçu + signature de cette clé avec la clé privée de l’autorité)
 * envoyer le certificat x509 à l'émetteur de la clé publique précedemment reçu
 
@@ -32,7 +33,7 @@
 ### Véhicule
 De base chaque véhicule envoyait Data (projet de rt0707)
 
-Data'=(Data, Empreinte SHA1 de(Data) signée avec la clé privée du véhicule, certificat X509 du véhicule)
+Data'=(Data, Empreinte SHA1 de (Data) signée avec la clé privée du véhicule, certificat X509 du véhicule)
 
 * envoyer Data' à la passerelle
 
