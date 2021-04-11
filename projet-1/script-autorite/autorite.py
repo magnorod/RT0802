@@ -102,8 +102,8 @@ if __name__ == '__main__' :
 
 
     # à la réception d' une clé publique lancement d'un thread pour s'occuper de la génération du certificat X509 à partir de cette clé publique 
-    m = Thread(cle_publique)
-    m.start()
+    # m = Thread(cle_publique)
+    # m.start()
 
 
     client.loop_forever()

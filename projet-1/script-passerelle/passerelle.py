@@ -19,6 +19,41 @@ class MonThread (threading.Thread):
         print("THREAD:denm envoyé au centralisateur")
     #endef
 
+
+def generer_cles_rsa(fichier_pem):
+
+    # on vérifie si la paire de clés existe déja
+    if os.path.exists(fichier_pem) == False:
+
+        # création de la paire de  clés RSA 2048
+        cmd="openssl genrsa -out "+fichier_pem+" 2048"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+        
+        print("info: paire de clés RSA 2048 créé")
+    else:
+        print("info: la paire de clés RSA existe déja ")
+    #endif
+        
+#endef
+
+def extraire_cle_publique(fichier_pem_cles,fichier_pem_cle_publique):
+
+    if os.path.exists(fichier_pem_cle_publique) == False:
+        cmd="openssl rsa -in "+fichier_pem_cles+" -pubout -out "+fichier_pem_cle_publique
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+        print("info: clé publique extraite")
+    else:
+        print("info: clé publique déja extraite ")
+    #endif
+#endef
+
+
 def on_message(client, userdata, msg):
     pass
 
@@ -114,19 +149,22 @@ def appartient_plage_horaire(plage, t1):
 #endef
 
 if __name__ == "__main__":
-    client = mqtt.Client()
-    client.on_message = on_message
 
-    client.message_callback_add("cam/#", on_cam)
-    client.message_callback_add("denm/#", on_denm)
-    client.connect('127.0.0.1', 1883, 60)
+    generer_cles_rsa("paire-de-cles-rsa.pem")
+    extraire_cle_publique("paire-de-cles-rsa.pem","cle-publique.pem")
+    # client = mqtt.Client()
+    # client.on_message = on_message
 
-    client.subscribe("cam/auto")
-    client.subscribe("cam/moto")
-    client.subscribe("cam/camion")
+    # client.message_callback_add("cam/#", on_cam)
+    # client.message_callback_add("denm/#", on_denm)
+    # client.connect('127.0.0.1', 1883, 60)
 
-    client.subscribe("denm/auto")
-    client.subscribe("denm/moto")
-    client.subscribe("denm/camion")
+    # client.subscribe("cam/auto")
+    # client.subscribe("cam/moto")
+    # client.subscribe("cam/camion")
 
-    client.loop_forever()
+    # client.subscribe("denm/auto")
+    # client.subscribe("denm/moto")
+    # client.subscribe("denm/camion")
+
+    # client.loop_forever()

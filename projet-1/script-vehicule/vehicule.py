@@ -1,12 +1,79 @@
 #!/usr/bin/python3
-import random
-import time
-import os
-import subprocess
+import random, time, sys, os, subprocess, json
 
 
 # initialisation graine random
 random.seed()
+
+def generer_cles_rsa(fichier_pem):
+
+    # on vérifie si la paire de clés existe déja
+    if os.path.exists(fichier_pem) == False:
+
+        # création de la paire de  clés RSA 2048
+        cmd="openssl genrsa -out "+fichier_pem+" 2048"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+        
+        print("info: paire de clés RSA 2048 créé")
+    else:
+        print("info: la paire de clés RSA existe déja ")
+    #endif
+        
+#endef
+
+def extraire_cle_publique(fichier_pem_cles,fichier_pem_cle_publique):
+
+    if os.path.exists(fichier_pem_cle_publique) == False:
+        cmd="openssl rsa -in "+fichier_pem_cles+" -pubout -out "+fichier_pem_cle_publique
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+        print("info: clé publique extraite")
+    else:
+        print("info: clé publique déja extraite ")
+    #endif
+#endef
+
+def generer_json_cle_publique(fichier_pem_cle_publique,ip_server_mqtt):
+
+    #récupération de la clé_publique
+
+    cmd="cat "+fichier_cle_publique
+    try:
+        var=subprocess.check_output(cmd, shell = True)
+        var=var.decode()
+        var=str(var)
+    except Exception as e:
+        print(e.returncode)
+        print(e.cmd)
+        print(e.output)
+
+    # récupération de l'ip de l'acteur demandant un certificat
+    cmd="ip addr show | grep enp0s3 | grep inet | awk '{print $2}'"
+    try:
+        var2=subprocess.check_output(cmd, shell = True)
+        var2=var2.decode()
+        var2=str(var2)
+    except Exception as e:
+        print(e.returncode)
+        print(e.cmd)
+        print(e.output)
+
+    if var and var2 : # vérifie si var et var2 existent
+
+        # création d'un dictionnaire
+        dictionnaire = {"cle_publique": var, "ip_demandeur_certificat":var2}
+
+        #conversion du dictionnaire en json
+        json_data=json.dumps(dictionnaire)
+
+        return json_data
+    #endif
+#endef
 
 def gen_stationId():
 
@@ -27,6 +94,7 @@ def gen_stationId():
 
     return stationId
 #endef
+
 
 def gen_json_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
 
@@ -123,56 +191,68 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
 
 if __name__ == '__main__' :
 
-    stationId=gen_stationId()
-    stationType_tab=(5,10,15)
-    ip_server_mqtt="192.168.1.21"
-    frequence_cam=0
-    longitude_base= 4.0333
-    latitude_base=49.25
-    cmpt_tour_boucle=0
-    variation_degre_1km_longitude= 0.01
-    variation_degre_1km_latitude= 0.008
+    fichier_paire_de_cles="paire-de-cles-rsa.pem"
+    fichier_cle_publique="cle-publique.pem"
+    ip_autorite="192.168.1.10"
+    
+    generer_cles_rsa(fichier_paire_de_cles)
+    extraire_cle_publique(fichier_paire_de_cles,fichier_cle_publique)
+    cle_publique_json=generer_json_cle_publique(fichier_cle_publique,ip_autorite)
+    print("cle_publique_json:")
+    print(cle_publique_json)
 
-    while True :
 
-        # génération stationType
-        choix_stationType=random.randint(0,len(stationType_tab)-1)
-        stationType=stationType_tab[choix_stationType]
+    # stationId=gen_stationId()
+    # stationType_tab=(5,10,15)
+    # ip_server_mqtt="192.168.1.21"
+    # frequence_cam=0
+    # longitude_base= 4.0333
+    # latitude_base=49.25
+    # cmpt_tour_boucle=0
+    # variation_degre_1km_longitude= 0.01
+    # variation_degre_1km_latitude= 0.008
 
-        # génération vitesse
-        if stationId == 2 :
-            vitesse = random.randint(90,130)
-        elif stationId == 3:
-            vitesse = random.randint(0,90)
-        else:
-            vitesse = random.randint(0,130)
-        #endif
+    
+    # while True :
 
-        if vitesse < 90 :
-            frequence_cam=1 # 1sec
-        else:
-            frequence_cam=0.100 #0,1
-        #endif
+    #     # génération stationType
+    #     choix_stationType=random.randint(0,len(stationType_tab)-1)
+    #     stationType=stationType_tab[choix_stationType]
 
-        distance_parcourue=((vitesse/3.6)*frequence_cam)/1000
-        longitude=longitude_base+(distance_parcourue*variation_degre_1km_longitude)
-        latitude=latitude_base+(distance_parcourue*variation_degre_1km_latitude)
+    #     # génération vitesse
+    #     if stationId == 2 :
+    #         vitesse = random.randint(90,130)
+    #     elif stationId == 3:
+    #         vitesse = random.randint(0,90)
+    #     else:
+    #         vitesse = random.randint(0,130)
+    #     #endif
 
-        timestamp=time.time()
+    #     if vitesse < 90 :
+    #         frequence_cam=1 # 1sec
+    #     else:
+    #         frequence_cam=0.100 #0,1
+    #     #endif
 
-        msg_cam = gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
+    #     distance_parcourue=((vitesse/3.6)*frequence_cam)/1000
+    #     longitude=longitude_base+(distance_parcourue*variation_degre_1km_longitude)
+    #     latitude=latitude_base+(distance_parcourue*variation_degre_1km_latitude)
 
-        # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
-        if cmpt_tour_boucle == 10:
-            msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
-            print(msg_denm)
-            cmpt_tour_boucle=0
-        #endif
+    #     timestamp=time.time()
 
-        print("envoi à une fréquence de "+str(frequence_cam))
-        print(msg_cam)
-        cmpt_tour_boucle+=1
-        time.sleep(frequence_cam)
+    #     msg_cam = gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
+
+    #     # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
+    #     if cmpt_tour_boucle == 10:
+    #         msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
+    #         print(msg_denm)
+    #         cmpt_tour_boucle=0
+    #     #endif
+
+    #     print("envoi à une fréquence de "+str(frequence_cam))
+    #     print(msg_cam)
+    #     cmpt_tour_boucle+=1
+    #     time.sleep(frequence_cam)
     #end
 #endif
 
