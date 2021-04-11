@@ -4,20 +4,32 @@ import paho.mqtt.client as mqtt
 
 class Thread (threading.Thread):
 
-    def __init__(self, donnees):
+    def __init__(self, csr, ip_demandeur_certificat):
         threading.Thread.__init__(self)
-        self.donnees = donnees
+        self.csr = csr
+        self.ip_demandeur_certificat = ip_demandeur_certificat
     #endef
 
     def run(self):
-        print("##########EXECUTION D'UN THREAD##########")
-        # print("THREAD:donnees="+str(self.donnees))
-        # #conversion du dictionnaire en json
-        # donneesJson = json.dumps(self.donnees)
-        # cmd1="mosquitto_pub -h 192.168.0.54 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
-        # os.system(cmd1)
-        # print("THREAD: cmd1="+str(cmd1))
-        # print("THREAD:denm envoyé au centralisateur")
+        
+        print("\n##########EXECUTION D'UN THREAD##########")
+        print("thread : csr\n"+str(self.csr))
+        print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
+        
+        # créer un fichier temporaire contenant la clé publique recu
+
+        cmd= 'echo "'+self.csr+'" > csr_recu.pem' 
+        
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+        
+        print("thread: fichier temporaire créé")
+        #endif
+
+        # générer le certificat à partir de la clé publique reçu qui sera signée avec la clé privée de l'autorité
+        signer_certificat("csr_recu.pem")
     #endef
 
 def recevoir_cle_publique():
@@ -44,10 +56,25 @@ def on_message(client, userdata, msg):
 
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    print("donnees:"+str(donnees))
-    print("cle_publique: "+str(donnees["cle_publique"] ) )
+    cle_publique_json=str(donnees["csr"] )
+    ip_demandeur_certificat=str(donnees["ip_demandeur_certificat"] )
+
+     # à la réception d' une clé publique lancement d'un thread pour s'occuper de la génération du certificat X509 à partir de cette clé publique 
+    m = Thread(cle_publique_json,ip_demandeur_certificat)
+    m.start()
+
 #endef
 
+def signer_certificat(csr):
+    # signature du certificat
+    cmd="openssl x509 -req -days 365 -in "+csr+" -signkey keypair.pem -out public-produit.crt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+    print("info: certificat X509 signé par l'autorité")
+
+#endef
 
 
 def generer_certificat_autorite(fichier_pem):
@@ -60,10 +87,10 @@ def generer_certificat_autorite(fichier_pem):
             os.system(cmd)
         except Exception as e:
             print(e.message)
-        
+
         print("info: paire de clé ok")
         
-        # création du fichier CSR avec la clé privée
+        # création du fichier Certificate Signing Request (CSR) avec la clé privée
         cmd="openssl req -new -key "+fichier_pem+" -out csr.pem -batch"
 
         try:
@@ -73,13 +100,12 @@ def generer_certificat_autorite(fichier_pem):
 
         print("info: fichier csr créé")
 
-        #Génération à partir de la clé privée et du csr du certificat public.crt 
+        # signature du certificat
         cmd="openssl x509 -req -days 365 -in csr.pem -signkey "+fichier_pem+" -out public.crt"
         try:
             os.system(cmd)
         except Exception as e:
             print(e.message)
-
         print("info: certificat X509 créé")
 
     else:
@@ -91,7 +117,7 @@ def generer_certificat_autorite(fichier_pem):
 
 if __name__ == '__main__' :
 
-    generer_certificat_autorite("privatekey.pem")
+    generer_certificat_autorite("keypair.pem")
     
     #attente d'une clé publique d'un véhicule ou de la station
     client = mqtt.Client()
@@ -100,11 +126,9 @@ if __name__ == '__main__' :
     client.connect('127.0.0.1', 1883, 60)
     client.subscribe("config/cle-publique")
 
+    print("info : en attente d'une requête")
 
-    # à la réception d' une clé publique lancement d'un thread pour s'occuper de la génération du certificat X509 à partir de cette clé publique 
-    # m = Thread(cle_publique)
-    # m.start()
-
+   
 
     client.loop_forever()
 

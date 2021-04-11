@@ -21,28 +21,24 @@ def generer_cles_rsa(fichier_pem):
     else:
         print("info: la paire de clés RSA existe déja ")
     #endif
-        
 #endef
 
-def extraire_cle_publique(fichier_pem_cles,fichier_pem_cle_publique):
+def generer_csr(fichier_pem):
 
-    if os.path.exists(fichier_pem_cle_publique) == False:
-        cmd="openssl rsa -in "+fichier_pem_cles+" -pubout -out "+fichier_pem_cle_publique
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-        print("info: clé publique extraite")
-    else:
-        print("info: clé publique déja extraite ")
-    #endif
+    # création du fichier Certificate Signing Request (CSR)
+    cmd="openssl req -new -key "+fichier_pem+" -out csr.pem -batch"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+
+    print("info: fichier csr créé")
 #endef
 
-def generer_json_cle_publique(fichier_pem_cle_publique,ip_server_mqtt):
+def generer_json_csr(fichier_csr):
 
-    #récupération de la clé_publique
 
-    cmd="cat "+fichier_cle_publique
+    cmd="cat "+fichier_csr
     try:
         var=subprocess.check_output(cmd, shell = True)
         var=var.decode()
@@ -66,13 +62,28 @@ def generer_json_cle_publique(fichier_pem_cle_publique,ip_server_mqtt):
     if var and var2 : # vérifie si var et var2 existent
 
         # création d'un dictionnaire
-        dictionnaire = {"cle_publique": var, "ip_demandeur_certificat":var2}
+        dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
 
         #conversion du dictionnaire en json
         json_data=json.dumps(dictionnaire)
 
         return json_data
     #endif
+#endef
+
+def envoyer_cle_publique(json_cle_publique,ip_autorite):
+
+    cmd="mosquitto_pub -h "+str(ip_autorite)+" -q 1 "+"-u vehicule -t config/cle-publique -m '"+str(json_cle_publique)+"'" 
+    print(cmd)
+    
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+
+    print("info : clé publique envoyé à l'autorité de certification")
+    #endif
+    
 #endef
 
 def gen_stationId():
@@ -191,15 +202,13 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
 
 if __name__ == '__main__' :
 
-    fichier_paire_de_cles="paire-de-cles-rsa.pem"
-    fichier_cle_publique="cle-publique.pem"
+    fichier_paire_de_cles="keypair.pem"
     ip_autorite="192.168.1.10"
     
     generer_cles_rsa(fichier_paire_de_cles)
-    extraire_cle_publique(fichier_paire_de_cles,fichier_cle_publique)
-    cle_publique_json=generer_json_cle_publique(fichier_cle_publique,ip_autorite)
-    print("cle_publique_json:")
-    print(cle_publique_json)
+    generer_csr(fichier_paire_de_cles)
+    csr_json=generer_json_csr("csr.pem")
+    envoyer_cle_publique(csr_json,ip_autorite)
 
 
     # stationId=gen_stationId()
