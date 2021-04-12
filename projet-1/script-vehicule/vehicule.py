@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import random, time, sys, os, subprocess, json
-
+import paho.mqtt.client as mqtt
 
 # initialisation graine random
 random.seed()
@@ -71,9 +71,9 @@ def generer_json_csr(fichier_csr):
     #endif
 #endef
 
-def envoyer_cle_publique(json_cle_publique,ip_autorite):
+def envoyer_csr(csr,ip_server_mqtt):
 
-    cmd="mosquitto_pub -h "+str(ip_autorite)+" -q 1 "+"-u vehicule -t config/cle-publique -m '"+str(json_cle_publique)+"'" 
+    cmd="mosquitto_pub -h "+str(ip_server_mqtt )+" -q 1 "+"-u vehicule -t config/csr -m '"+str(csr)+"'" 
     print(cmd)
     
     try:
@@ -81,7 +81,7 @@ def envoyer_cle_publique(json_cle_publique,ip_autorite):
     except Exception as e:
         print(e.message)
 
-    print("info : clé publique envoyé à l'autorité de certification")
+    print("info : csr envoyé à l'autorité de certification")
     #endif
     
 #endef
@@ -198,17 +198,46 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
 
 #endef 
 
+def on_config(client, userdata, msg):
+    donnees = json.loads(msg.payload.decode("utf-8"))
+    certificat=str(donnees["certificatX509"] )
+    
+    # écriture du certificat dans un fichier
+    cmd="echo "+certificat+ " > certificat_signe.crt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+    
+    print("info: le certificatX509 a été récupéré ")
+
+#endef
+
+def on_message(client, userdata, msg):
+    pass
+#endef
+
 
 
 if __name__ == '__main__' :
 
     fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.1.10"
+    ip_autorite="192.168.1.13"
     
     generer_cles_rsa(fichier_paire_de_cles)
     generer_csr(fichier_paire_de_cles)
     csr_json=generer_json_csr("csr.pem")
-    envoyer_cle_publique(csr_json,ip_autorite)
+    envoyer_csr(csr_json,ip_autorite)
+
+    client = mqtt.Client()
+    client.on_message = on_message
+    client.message_callback_add("config/#", on_config)
+    client.connect('127.0.0.1', 1883, 60)
+    client.subscribe("config/certificatX509")
+    
+    client.loop_forever()
+
+
 
 
     # stationId=gen_stationId()

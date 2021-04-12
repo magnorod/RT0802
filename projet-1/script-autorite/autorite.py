@@ -17,7 +17,6 @@ class Thread (threading.Thread):
         print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
         
         # créer un fichier temporaire contenant la clé publique recu
-
         cmd= 'echo "'+self.csr+'" > csr_recu.pem' 
         
         try:
@@ -30,23 +29,31 @@ class Thread (threading.Thread):
 
         # générer le certificat à partir de la clé publique reçu qui sera signée avec la clé privée de l'autorité
         signer_certificat("csr_recu.pem")
+
+        # envoyer le certif
+        envoyer_certificat(self.ip_demandeur_certificat,"certificatX509","public-produit.crt")
     #endef
 
-def recevoir_cle_publique():
-    donnees = json.loads(msg.payload.decode("utf-8"))
-    print("donnees:"+str(donnees))
-    cle_publique=str(donnees["cle_publique"])
-
-    # envoi sous forme json  donneesJson = json.dumps(self.donnees)
-    envoyer_certificat(ip_desti,"cle_publique",cle_publique)
-#endef
-
 def envoyer_certificat(ip_desti,topic,certificat):
-    #envoyer le certificat x509 qui a été généré à la cible 
-    print("")
-    cmd1="mosquitto_pub -h "+str(ip_desti)+" -q 1 "+"-u  autorite -t config/"+str(topic)+" -m '"+str(certificat)+"'"
-    os.system(cmd1)
 
+    #envoyer le certificat x509 qui a été généré à la cible 
+    ip_desti=ip_desti[0:len(ip_desti)-4]
+
+
+     # création d'un dictionnaire
+    dictionnaire = {"certificatX509":certificat}
+
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
+
+    cmd="mosquitto_pub -h "+str(ip_desti)+" -q 1 -u autorite -t config/"+str(topic)+" -m '"+str(json_data)+"'"
+    print(cmd)
+
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+    print("info: certificat X509 envoyé au demandeur")
 #endef
 
 def on_message(client, userdata, msg):
@@ -124,9 +131,9 @@ if __name__ == '__main__' :
     client.on_message = on_message
     client.message_callback_add("config/#", on_config)
     client.connect('127.0.0.1', 1883, 60)
-    client.subscribe("config/cle-publique")
+    client.subscribe("config/csr")
 
-    print("info : en attente d'une requête")
+    print("info : en attente d'une demande de certificat X509")
 
    
 
