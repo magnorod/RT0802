@@ -40,7 +40,13 @@ def envoyer_certificat(ip_desti,topic,certificat):
     ip_desti=ip_desti[0:len(ip_desti)-4]
 
 
-     # création d'un dictionnaire
+    # création d'un dictionnaire qui va contenir le certificat
+    certificat=subprocess.check_output(["cat", "public-produit.crt"])
+    certificat=certificat.decode()
+    certificat=str(certificat)
+
+    print("info: certificat")
+    print(certificat)
     dictionnaire = {"certificatX509":certificat}
 
     #conversion du dictionnaire en json
@@ -133,8 +139,6 @@ if __name__ == '__main__' :
     client.connect('127.0.0.1', 1883, 60)
     client.subscribe("config/csr")
     print("info: en attente d'une demande de certificat X509")
-
-   
     client.loop_forever()
 
    
