@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import random, time, sys, os, subprocess, json
+import hashlib, random, time, sys, os, subprocess, json
 import paho.mqtt.client as mqtt
 
 # initialisation graine random
@@ -15,7 +15,9 @@ def generer_cles_rsa(fichier_pem):
         try:
             os.system(cmd)
         except Exception as e:
-            print(e.message)
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+
         
         print("info: paire de clés RSA 2048 créé")
     else:
@@ -30,7 +32,9 @@ def generer_csr(fichier_pem):
     try:
         os.system(cmd)
     except Exception as e:
-        print(e.message)
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
 
     print("info: fichier csr créé")
 #endef
@@ -44,9 +48,8 @@ def generer_json_csr(fichier_csr):
         var=var.decode()
         var=str(var)
     except Exception as e:
-        print(e.returncode)
-        print(e.cmd)
-        print(e.output)
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
     # récupération de l'ip de l'acteur demandant un certificat
     cmd="ip addr show | grep enp0s3 | grep inet | awk '{print $2}'"
@@ -55,9 +58,8 @@ def generer_json_csr(fichier_csr):
         var2=var2.decode()
         var2=str(var2)
     except Exception as e:
-        print(e.returncode)
-        print(e.cmd)
-        print(e.output)
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
     if var and var2 : # vérifie si var et var2 existent
 
@@ -79,9 +81,10 @@ def envoyer_csr(csr,ip_server_mqtt):
     try:
         os.system(cmd)
     except Exception as e:
-        print(e.message)
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
-    print("info : csr envoyé à l'autorité de certification")
+    print("info: csr envoyé à l'autorité de certification")
     #endif
     
 #endef
@@ -137,11 +140,14 @@ def gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,
     else:
         topic="camion"
 
-    cmd1="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(msg_cam)+"'" 
-    print(cmd1)
+    cmd="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(msg_cam)+"'" 
+    print(cmd)
 
-    os.system(cmd1)
-    print("\n")
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
     
     return msg_cam
@@ -190,9 +196,16 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
         topic="camion"
     #endif
 
-    cmd1="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t denm/"+str(topic)+" -m '"+str(msg_denm)+"'"
-    print(cmd1)
-    os.system(cmd1)
+    cmd="mosquitto_pub -h "+str(ip_server_mqtt)+" -q 1 "+"-u "+str(stationId)+" -t denm/"+str(topic)+" -m '"+str(msg_denm)+"'"
+    print(cmd)
+    
+
+    try:
+        os.system(cmd)
+
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
     return msg_denm
 
@@ -207,7 +220,8 @@ def on_config(client, userdata, msg):
     try:
         os.system(cmd)
     except Exception as e:
-        print(e.message)
+        sys.stderr.write(e.message+"\n")
+        exit(1)
     
     print("info: le certificatX509 a été récupéré ")
 
@@ -217,12 +231,37 @@ def on_message(client, userdata, msg):
     pass
 #endef
 
+def choix_scenario():
 
+    scenario=input("info: choisir un scénario (1 ou 2) \n")
+
+    if scenario != '1' and scenario != '2':
+        sys.stderr.write("erreur: choisir le scénario 1 ou 2 \n")
+        exit(1)
+    #endif
+
+    return scenario
+#endef
+
+
+def envoyer_data_scenario1(ip_passerelle,message,certificat_station):
+
+
+    ## génération du hash
+    message= bytes(message, 'utf-8')
+    hash=hashlib.sha1(message).hexdigest()
+
+    print("info: hash du message")
+    print(hash)
+
+    ## signature du hash avec la clé privée
+
+#endef
 
 if __name__ == '__main__' :
 
     fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.1.13"
+    ip_autorite="192.168.3.17"
     
     generer_cles_rsa(fichier_paire_de_cles)
     generer_csr(fichier_paire_de_cles)
@@ -235,20 +274,39 @@ if __name__ == '__main__' :
     client.connect('127.0.0.1', 1883, 60)
     client.subscribe("config/certificatX509")
     
-    client.loop_forever()
+    client.loop_start()
+    time.sleep(1)
+    client.loop_stop()
+
+
+    scenario=choix_scenario()
+
+    stationId=gen_stationId()
+    stationType_tab=(5,10,15)
+    ip_passerelle="192.168.1.21"
+    frequence_cam=0
+    longitude_base= 4.0333
+    latitude_base=49.25
+    cmpt_tour_boucle=0
+    variation_degre_1km_longitude= 0.01
+    variation_degre_1km_latitude= 0.008
+    
+
+    if scenario == '1':
+        print("info: scénario authentification")
+        envoyer_data_scenario1(ip_passerelle,"test1234","certificat_signe.crt")
+
+    else : #scenario=2
+        print("info: scénario confidentialité")
+    #endef 
+
+    #client.loop_forever()
+    
 
 
 
 
-    # stationId=gen_stationId()
-    # stationType_tab=(5,10,15)
-    # ip_server_mqtt="192.168.1.21"
-    # frequence_cam=0
-    # longitude_base= 4.0333
-    # latitude_base=49.25
-    # cmpt_tour_boucle=0
-    # variation_degre_1km_longitude= 0.01
-    # variation_degre_1km_latitude= 0.008
+   
 
     
     # while True :

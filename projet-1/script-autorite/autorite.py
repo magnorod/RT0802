@@ -132,11 +132,9 @@ if __name__ == '__main__' :
     client.message_callback_add("config/#", on_config)
     client.connect('127.0.0.1', 1883, 60)
     client.subscribe("config/csr")
-
-    print("info : en attente d'une demande de certificat X509")
+    print("info: en attente d'une demande de certificat X509")
 
    
-
     client.loop_forever()
 
    

@@ -152,19 +152,19 @@ if __name__ == "__main__":
 
     generer_cles_rsa("paire-de-cles-rsa.pem")
     extraire_cle_publique("paire-de-cles-rsa.pem","cle-publique.pem")
-    # client = mqtt.Client()
-    # client.on_message = on_message
+    client = mqtt.Client()
+    client.on_message = on_message
 
-    # client.message_callback_add("cam/#", on_cam)
-    # client.message_callback_add("denm/#", on_denm)
-    # client.connect('127.0.0.1', 1883, 60)
+    client.message_callback_add("cam/#", on_cam)
+    client.message_callback_add("denm/#", on_denm)
+    client.connect('127.0.0.1', 1883, 60)
 
-    # client.subscribe("cam/auto")
-    # client.subscribe("cam/moto")
-    # client.subscribe("cam/camion")
+    client.subscribe("cam/auto")
+    client.subscribe("cam/moto")
+    client.subscribe("cam/camion")
 
-    # client.subscribe("denm/auto")
-    # client.subscribe("denm/moto")
-    # client.subscribe("denm/camion")
+    client.subscribe("denm/auto")
+    client.subscribe("denm/moto")
+    client.subscribe("denm/camion")
 
-    # client.loop_forever()
+    client.loop_forever()
