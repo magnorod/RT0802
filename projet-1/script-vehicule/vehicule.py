@@ -25,10 +25,10 @@ def generer_cles_rsa(fichier_pem):
     #endif
 #endef
 
-def generer_csr(fichier_pem):
+def generer_csr(fichier_pem,csr):
 
     # création du fichier Certificate Signing Request (CSR)
-    cmd="openssl req -new -key "+fichier_pem+" -out csr.pem -batch"
+    cmd="openssl req -new -key "+fichier_pem+" -out "+csr+" -batch"
     try:
         os.system(cmd)
     except Exception as e:
@@ -69,8 +69,18 @@ def generer_json_csr(fichier_csr):
         #conversion du dictionnaire en json
         json_data=json.dumps(dictionnaire)
 
+        # cmd="rm "+fichier_csr
+        # print("SUPPRESSION:"+cmd)
+        # try:
+        #     os.system(cmd)
+        # except Exception as e:
+        #     sys.stderr.write(e.message+"\n")
+        #     exit(1)
+
         return json_data
     #endif
+
+   
 #endef
 
 def envoyer_csr(csr,ip_server_mqtt):
@@ -112,8 +122,20 @@ def gen_stationId():
 
 def gen_json_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
 
-    msg_cam = '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"vitesse":'+str(vitesse)+',"heading":'+str(heading)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
-    return msg_cam
+    #msg_cam = '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"vitesse":'+str(vitesse)+',"heading":'+str(heading)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
+    
+    
+    
+    #print(certificat)
+    dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
+    dictionnaire = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"vitesse":vitesse, "heading":heading, "positionGPS":dictionnaire_positionGPS }
+
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
+    print("info: json via dictionnaire")
+    print(dictionnaire)
+    
+    return json_data
 
 #endef
 
@@ -219,7 +241,7 @@ def on_config(client, userdata, msg):
     print(certificat)
 
     # écriture du certificat dans un fichier
-    cmd="echo \""+certificat+"\" > certificat_signe.crt"
+    cmd="echo \""+certificat+"\" > certificatx509.crt"
     try:
         os.system(cmd)
     except Exception as e:
@@ -247,18 +269,9 @@ def choix_scenario():
 #endef
 
 
-# def envoyer_data_scenario1(ip_passerelle,message,message_hashcertificat_station):
+def recuperer_cle_publique(keypair,cle_pub):
 
-
-   
-#     ## signature du hash avec la clé privée
-
-# #endef
-
-
-def recuperer_cle_publique(keypair):
-
-    cmd="openssl rsa -in "+keypair+" -pubout -out rsapub.pem"
+    cmd="openssl rsa -in "+keypair+" -pubout -out "+cle_pub
     try:
         os.system(cmd)
     except Exception as e:
@@ -268,73 +281,89 @@ def recuperer_cle_publique(keypair):
 #endef
 
 
-
-def signer_hash_sha1(hash):
-
-    #stockage du hash dans un fichier tmp
-    cmd= "echo "+hash+" > hash-tmp"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    
-    print("info: hash")
-    print(hash)
-
-    cmd="openssl rsautl -sign -inkey keypair.pem -keyform PEM -in hash-tmp -out signature.sig"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: Hash signé avec la clé privée de la station")
-    
-#endef
-
-
-def verifier_hash(hash_file,signature,certificat_signe):
-
-    print("info: TEST VERIF SIGNATURE")
-
-    #extraction de la clé publique du certificat
-    cmd="openssl x509 -pubkey -noout -in "+certificat_signe+" > pub-key-du-certif.pem"
+def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
+    cmd="openssl x509 -pubkey -noout -in "+certificatx509+" > "+cle_pub_certificat
     print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
+#endef
 
-    # vérification 
-    cmd="openssl dgst -verify pub-key-du-certif.pem -signature "+signature+" "+hash_file
-    print(cmd)
+def scenario1_envoyer_cam(json_data,signature_du_hash_de_data,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
+    
+    #construction du message CAM
+    dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
+    dictionnaire_data = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"vitesse":vitesse, "heading":heading, "positionGPS":dictionnaire_positionGPS }
+    
+    # récupération de la signature
+    fichier = open(signature_du_hash_de_data, "r")
+    var=fichier.read()
+    fichier.close()
+    
+    # ajout de la signature au dictionnaire
+    dictionnaire_signature={"signature":str(var)}
+
+
+    # récupération du certificat
+    fichier = open(certificat, "r")
+    var=fichier.read()
+    fichier.close()
+
+    # ajout du certificat au dictionnaire
+    dictionnaire_certificat={"certificat":str(var)}
+
+    # ajout du dictionnaire global
+    dictionnaire={"data":dictionnaire_data,"signature":dictionnaire_signature,"certificat":dictionnaire_certificat}
+
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
+    print("info: json via dictionnaire")
+    print(dictionnaire)
+    
+    return json_data
+#endef
+
+
+def signer_hash_sha1_message(message,fichier_paire_de_cles):
+
+
+    #création d'un fichier tmp
+    cmd="echo "+message+" > message.txt"
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-
-#endef
-
-def generer_hash_sha1(message):
-
-    message= bytes(message, 'utf-8')
-    hash=hashlib.sha1(message).hexdigest()
-
-    return hash
+    cmd="openssl dgst -sign "+fichier_paire_de_cles+" -keyform PEM -sha1 -out hash.sig -binary message.txt"
+    print(cmd)
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 #endef 
+
+
 
 if __name__ == '__main__' :
 
+
+    #definitions des variables
     fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.3.17"
+    ip_autorite="192.168.3.22"
+    fichier_signature="hash.sig"
+    cle_pub_certificat="pubx509.pem"
+    cle_pub="pub.pem"
+    fichier_csr="csr.pem"
+    certificat="certificatx509.crt"
     
     generer_cles_rsa(fichier_paire_de_cles)
-    recuperer_cle_publique(fichier_paire_de_cles)
-    generer_csr(fichier_paire_de_cles)
-    csr_json=generer_json_csr("csr.pem")
+    recuperer_cle_publique(fichier_paire_de_cles,cle_pub)
+    generer_csr(fichier_paire_de_cles,fichier_csr)
+    csr_json=generer_json_csr(fichier_csr)
     envoyer_csr(csr_json,ip_autorite)
 
     client = mqtt.Client()
@@ -350,71 +379,83 @@ if __name__ == '__main__' :
 
     scenario=choix_scenario()
 
-    # stationId=gen_stationId()
-    # stationType_tab=(5,10,15)
-    # ip_passerelle="192.168.1.21"
-    # frequence_cam=0
-    # longitude_base= 4.0333
-    # latitude_base=49.25
-    # cmpt_tour_boucle=0
-    # variation_degre_1km_longitude= 0.01
-    # variation_degre_1km_latitude= 0.008
-    
+    stationId=gen_stationId()
+    stationType_tab=(5,10,15)
+    ip_passerelle="192.168.1.21"
+    frequence_cam=0
+    longitude_base= 4.0333
+    latitude_base=49.25
+    cmpt_tour_boucle=0
+    variation_degre_1km_longitude= 0.01
+    variation_degre_1km_latitude= 0.008
+        
+    while True :
 
-    if scenario == '1':
-        print("info: scénario authentification")
-        hash_message=generer_hash_sha1("test1234")
-        hash_signe=signer_hash_sha1(hash_message)
-        verifier_hash("hash-tmp","signature.sig","certificat_signe.crt")
+        # génération stationType
+        choix_stationType=random.randint(0,len(stationType_tab)-1)
+        stationType=stationType_tab[choix_stationType]
 
-    else : #scenario=2
-        print("info: scénario confidentialité")
-    #endef 
+        # génération vitesse
+        if stationId == 2 :
+            vitesse = random.randint(90,130)
+        elif stationId == 3:
+            vitesse = random.randint(0,90)
+        else:
+            vitesse = random.randint(0,130)
+        #endif
 
-    #client.loop_forever()
-    
-#     while True :
+        if vitesse < 90 :
+            frequence_cam=1 # 1sec
+        else:
+            frequence_cam=0.100 #0,1
+        #endif
 
-#         # génération stationType
-#         choix_stationType=random.randint(0,len(stationType_tab)-1)
-#         stationType=stationType_tab[choix_stationType]
+        distance_parcourue=((vitesse/3.6)*frequence_cam)/1000
+        longitude=longitude_base+(distance_parcourue*variation_degre_1km_longitude)
+        latitude=latitude_base+(distance_parcourue*variation_degre_1km_latitude)
 
-#         # génération vitesse
-#         if stationId == 2 :
-#             vitesse = random.randint(90,130)
-#         elif stationId == 3:
-#             vitesse = random.randint(0,90)
-#         else:
-#             vitesse = random.randint(0,130)
-#         #endif
+        timestamp=time.time()
+        
+        
+        if scenario == '1':
+            
+            print("info: scénario authentification")
+            
+            # Construction du message
+            msg_cam = gen_json_cam(stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
 
-#         if vitesse < 90 :
-#             frequence_cam=1 # 1sec
-#         else:
-#             frequence_cam=0.100 #0,1
-#         #endif
+            print("msg_cam:")
+            print(msg_cam)
 
-#         distance_parcourue=((vitesse/3.6)*frequence_cam)/1000
-#         longitude=longitude_base+(distance_parcourue*variation_degre_1km_longitude)
-#         latitude=latitude_base+(distance_parcourue*variation_degre_1km_latitude)
+            #Signature du hash sha1 du message
+            signer_hash_sha1_message(msg_cam,fichier_paire_de_cles)
 
-#         timestamp=time.time()
+            # envoi
+            scenario1_envoyer_cam(msg_cam,fichier_signature,certificat,stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
 
-#         msg_cam = gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
+             # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
+            if cmpt_tour_boucle == 10:
+                msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
+                print(msg_denm)
+                cmpt_tour_boucle=0
+            #endif
 
-#         # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
-#         if cmpt_tour_boucle == 10:
-#             msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
-#             print(msg_denm)
-#             cmpt_tour_boucle=0
-#         #endif
+            print("envoi à une fréquence de "+str(frequence_cam))
+            print(msg_cam)
+            cmpt_tour_boucle+=1
+            time.sleep(frequence_cam)
 
-#         print("envoi à une fréquence de "+str(frequence_cam))
-#         print(msg_cam)
-#         cmpt_tour_boucle+=1
-#         time.sleep(frequence_cam)
-#     end
-# endif
+        else : #scenario=2
+            print("info: scénario confidentialité")
+        #endif
+
+
+
+        #msg_cam = gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp)
+
+       
+    #end
+#endif
 
    
     

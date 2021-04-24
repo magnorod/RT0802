@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import json, os, subprocess, threading
+import json, os, subprocess, threading, sys
 import paho.mqtt.client as mqtt
 
 class Thread (threading.Thread):
@@ -19,6 +19,7 @@ class Thread (threading.Thread):
         # créer un fichier temporaire contenant la clé publique recu
         cmd= 'echo "'+self.csr+'" > csr_recu.pem' 
         
+        #print(self.csr)
         try:
             os.system(cmd)
         except Exception as e:
@@ -28,10 +29,11 @@ class Thread (threading.Thread):
         #endif
 
         # générer le certificat à partir de la clé publique reçu qui sera signée avec la clé privée de l'autorité
-        signer_certificat("csr_recu.pem")
+        signer_certificat("csr_recu.pem","keypair.pem")
 
         # envoyer le certif
         envoyer_certificat(self.ip_demandeur_certificat,"certificatX509","public-produit.crt")
+
     #endef
 
 def envoyer_certificat(ip_desti,topic,certificat):
@@ -46,14 +48,14 @@ def envoyer_certificat(ip_desti,topic,certificat):
     certificat=str(certificat)
 
     print("info: certificat")
-    print(certificat)
+    #print(certificat)
     dictionnaire = {"certificatX509":certificat}
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
 
     cmd="mosquitto_pub -h "+str(ip_desti)+" -q 1 -u autorite -t config/"+str(topic)+" -m '"+str(json_data)+"'"
-    print(cmd)
+    #print(cmd)
 
     try:
         os.system(cmd)
@@ -66,26 +68,38 @@ def on_message(client, userdata, msg):
     pass
 #endef
 
+def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
+    cmd="openssl x509 -pubkey -noout -in "+certificatx509+" > "+cle_pub_certificat
+    print(cmd)
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+#endef
 
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    cle_publique_json=str(donnees["csr"] )
+    csr_json=str(donnees["csr"] )
     ip_demandeur_certificat=str(donnees["ip_demandeur_certificat"] )
 
-     # à la réception d' une clé publique lancement d'un thread pour s'occuper de la génération du certificat X509 à partir de cette clé publique 
-    m = Thread(cle_publique_json,ip_demandeur_certificat)
+     # à la réception d'une csr lancement d'un thread pour s'occuper de la génération du certificat X509
+    m = Thread(csr_json,ip_demandeur_certificat)
     m.start()
 
 #endef
 
-def signer_certificat(csr):
+def signer_certificat(csr,private_key):
     # signature du certificat
-    cmd="openssl x509 -req -days 365 -in "+csr+" -signkey keypair.pem -out public-produit.crt"
+    cmd="openssl x509 -req -days 365 -in "+csr+" -signkey "+private_key+" -out public-produit.crt"
+    print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
         print(e.message)
     print("info: certificat X509 signé par l'autorité")
+
+    recuperer_cle_publique_certificat("public-produit.crt","pub-client.pem")
 
 #endef
 
@@ -103,8 +117,17 @@ def generer_certificat_autorite(fichier_pem):
 
         print("info: paire de clé ok")
         
+
+        cmd="openssl rsa -in "+fichier_pem+" -pubout -out pub.pem"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+        print("info: clé publique extraite")
+
         # création du fichier Certificate Signing Request (CSR) avec la clé privée
-        cmd="openssl req -new -key "+fichier_pem+" -out csr.pem -batch"
+        cmd="openssl req -new -key "+fichier_pem+" -out csr-autorite.pem -batch"
 
         try:
             os.system(cmd)
@@ -114,12 +137,21 @@ def generer_certificat_autorite(fichier_pem):
         print("info: fichier csr créé")
 
         # signature du certificat
-        cmd="openssl x509 -req -days 365 -in csr.pem -signkey "+fichier_pem+" -out public.crt"
+        cmd="openssl x509 -req -days 365 -in csr-autorite.pem -signkey "+fichier_pem+" -out public-autorite.crt"
         try:
             os.system(cmd)
         except Exception as e:
             print(e.message)
         print("info: certificat X509 créé")
+
+
+        # supppression du csr
+        cmd="rm csr-autorite.pem"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e.message)
+
 
     else:
         print("info: le certificat X509 de l autorite existe deja")

@@ -53,6 +53,21 @@ def extraire_cle_publique(fichier_pem_cles,fichier_pem_cle_publique):
     #endif
 #endef
 
+def verifier_hash(hash_file,signature,certificatx509,cle_pub_certificat):
+
+    print("info: TEST VERIF SIGNATURE")
+
+
+    #cmd="openssl rsautl -in "+signature+" -verify -pubin -inkey "+cle_pub_certificat
+    cmd="openssl dgst -verify "+cle_pub_certificat+" -keyform PEM -sha1 -signature "+signature+" -binary message.txt"
+    
+    print(cmd)
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+#endef
 
 def on_message(client, userdata, msg):
     pass
