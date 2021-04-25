@@ -13,20 +13,17 @@ class Thread (threading.Thread):
     def run(self):
         
         print("\n##########EXECUTION D'UN THREAD##########")
-        print("thread : csr\n"+str(self.csr))
-        print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
+        # print("thread : csr\n"+str(self.csr))
+        # print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
         
         # créer un fichier temporaire contenant la clé publique recu
         cmd= 'echo "'+self.csr+'" > csr_recu.pem' 
-        
-        #print(self.csr)
         try:
             os.system(cmd)
         except Exception as e:
             print(e.message)
         
         print("thread: fichier temporaire créé")
-        #endif
 
         # générer le certificat à partir de la clé publique reçu qui sera signée avec la clé privée de l'autorité
         signer_certificat("csr_recu.pem","keypair.pem")
@@ -47,21 +44,18 @@ def envoyer_certificat(ip_desti,topic,certificat):
     certificat=certificat.decode()
     certificat=str(certificat)
 
-    print("info: certificat")
-    #print(certificat)
+
     dictionnaire = {"certificatX509":certificat}
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
 
     cmd="mosquitto_pub -h "+str(ip_desti)+" -q 1 -u autorite -t config/"+str(topic)+" -m '"+str(json_data)+"'"
-    #print(cmd)
-
     try:
         os.system(cmd)
     except Exception as e:
         print(e.message)
-    print("info: certificat X509 envoyé au demandeur")
+    print("thread: certificat X509 envoyé au demandeur du CSR")
 #endef
 
 def on_message(client, userdata, msg):
@@ -70,7 +64,7 @@ def on_message(client, userdata, msg):
 
 def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
     cmd="openssl x509 -pubkey -noout -in "+certificatx509+" > "+cle_pub_certificat
-    print(cmd)
+    #print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
@@ -92,12 +86,12 @@ def on_config(client, userdata, msg):
 def signer_certificat(csr,private_key):
     # signature du certificat
     cmd="openssl x509 -req -days 365 -in "+csr+" -signkey "+private_key+" -out public-produit.crt"
-    print(cmd)
+    #print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
         print(e.message)
-    print("info: certificat X509 signé par l'autorité")
+    print("thread: certificat X509 signé par l'autorité")
 
     recuperer_cle_publique_certificat("public-produit.crt","pub-client.pem")
 
@@ -134,7 +128,7 @@ def generer_certificat_autorite(fichier_pem):
         except Exception as e:
             print(e.message)
 
-        print("info: fichier csr créé")
+        print("info: fichier CSR créé")
 
         # signature du certificat
         cmd="openssl x509 -req -days 365 -in csr-autorite.pem -signkey "+fichier_pem+" -out public-autorite.crt"
@@ -170,7 +164,7 @@ if __name__ == '__main__' :
     client.message_callback_add("config/#", on_config)
     client.connect('127.0.0.1', 1883, 60)
     client.subscribe("config/csr")
-    print("info: en attente d'une demande de certificat X509")
+    print("info: en attente de CSR")
     client.loop_forever()
 
    

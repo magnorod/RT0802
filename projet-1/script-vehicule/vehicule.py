@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import hashlib, random, time, sys, os, subprocess, json
+import random, time, sys, os, subprocess, json, base64
 import paho.mqtt.client as mqtt
 
 # initialisation graine random
@@ -34,7 +34,6 @@ def generer_csr(fichier_pem,csr):
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
-
 
     print("info: fichier csr créé")
 #endef
@@ -120,29 +119,34 @@ def gen_stationId():
 #endef
 
 
-def gen_json_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
+def gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
 
     #msg_cam = '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"vitesse":'+str(vitesse)+',"heading":'+str(heading)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
-    
-    
     
     #print(certificat)
     dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
     dictionnaire = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"vitesse":vitesse, "heading":heading, "positionGPS":dictionnaire_positionGPS }
 
     #conversion du dictionnaire en json
-    json_data=json.dumps(dictionnaire)
-    print("info: json via dictionnaire")
-    print(dictionnaire)
+    #json_data=json.dumps(dictionnaire
     
-    return json_data
+    return dictionnaire
 
 #endef
 
-def gen_json_denm(stationId,stationType,cause,sub_cause,latitude,longitude,timestamp):
+def gen_dictionnaire_denm(stationId,stationType,cause,sub_cause,latitude,longitude,timestamp):
 
-    msg_denm =  '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"cause":'+str(cause)+',"sub-cause":'+str(sub_cause)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
-    return msg_denm
+    #msg_denm =  '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"cause":'+str(cause)+',"sub-cause":'+str(sub_cause)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
+    
+    
+    dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
+    dictionnaire = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"cause":cause, "sub-cause":sub_cause, "positionGPS":dictionnaire_positionGPS }
+
+    #conversion du dictionnaire en json
+    #json_data=json.dumps(dictionnaire)
+    
+
+    return dictionnaire
 
 #endef
 
@@ -237,8 +241,8 @@ def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
     certificat=str(donnees["certificatX509"] )
 
-    print("info: donnees")
-    print(certificat)
+    # print("info: donnees")
+    # print(certificat)
 
     # écriture du certificat dans un fichier
     cmd="echo \""+certificat+"\" > certificatx509.crt"
@@ -291,43 +295,76 @@ def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
         exit(1)
 #endef
 
-def scenario1_envoyer_cam(json_data,signature_du_hash_de_data,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
-    
-    #construction du message CAM
-    dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
-    dictionnaire_data = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"vitesse":vitesse, "heading":heading, "positionGPS":dictionnaire_positionGPS }
-    
-    # récupération de la signature
-    fichier = open(signature_du_hash_de_data, "r")
-    var=fichier.read()
-    fichier.close()
-    
-    # ajout de la signature au dictionnaire
-    dictionnaire_signature={"signature":str(var)}
+def bin2hex(str1):
+    bytes_str = bytes(str1, 'utf-8')
+    return binascii.hexlify(bytes_str)
+#endef
 
+def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp,fichier_paire_de_cles,ip_passerelle):
+    
+    # construction du message CAM
+    dictionnaire_data=gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp)
+    
+    # print("dictionnaire_data:")
+    # print(dictionnaire_data)
+
+    # transfromation du dictionnaire en json
+    json_dictionnaire_data=json.dumps(dictionnaire_data)
+
+    # hachage puis signature du json
+    signer_hash_sha1_message(json_dictionnaire_data,fichier_paire_de_cles)
 
     # récupération du certificat
     fichier = open(certificat, "r")
     var=fichier.read()
     fichier.close()
 
-    # ajout du certificat au dictionnaire
+    # ajout du certificat au dictionnaire_certificat
     dictionnaire_certificat={"certificat":str(var)}
 
-    # ajout du dictionnaire global
+    # récupération de la signature (lecture binaire nécessaire)
+    fichier = open(signature_du_hash_de_data, "rb")
+    var=fichier.read()
+    fichier.close()
+
+    print("info: signature binaire:")
+    print(var)
+    print("\n")
+    
+    # encodage du binaire en base64 (sinon envoi impossible)
+    var=base64.b64encode(var)
+
+    # ajout de la signature au dictionnaire_signature
+    dictionnaire_signature={"signature_base64_binaire":str(var)}
+  
+    # regroupement de l'ensemble des dictionnaires
     dictionnaire={"data":dictionnaire_data,"signature":dictionnaire_signature,"certificat":dictionnaire_certificat}
 
-    #conversion du dictionnaire en json
+    #conversion du dictionnaire final en json
     json_data=json.dumps(dictionnaire)
-    print("info: json via dictionnaire")
-    print(dictionnaire)
-    
-    return json_data
+
+    # construction requête bash
+    topic=""
+    if stationId == 1:
+        topic="auto"
+    elif stationId == 2:
+        topic="moto"
+    else:
+        topic="camion"
+
+    cmd="mosquitto_pub -h "+str(ip_passerelle)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(json_data)+"'" 
+    print(cmd)
+
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: message envoyé")
 #endef
 
 
 def signer_hash_sha1_message(message,fichier_paire_de_cles):
-
 
     #création d'un fichier tmp
     cmd="echo "+message+" > message.txt"
@@ -338,7 +375,7 @@ def signer_hash_sha1_message(message,fichier_paire_de_cles):
         exit(1)
 
     cmd="openssl dgst -sign "+fichier_paire_de_cles+" -keyform PEM -sha1 -out hash.sig -binary message.txt"
-    print(cmd)
+    #print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
@@ -350,10 +387,9 @@ def signer_hash_sha1_message(message,fichier_paire_de_cles):
 
 if __name__ == '__main__' :
 
-
     #definitions des variables
     fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.3.22"
+    ip_autorite="192.168.3.26"
     fichier_signature="hash.sig"
     cle_pub_certificat="pubx509.pem"
     cle_pub="pub.pem"
@@ -381,10 +417,11 @@ if __name__ == '__main__' :
 
     stationId=gen_stationId()
     stationType_tab=(5,10,15)
-    ip_passerelle="192.168.1.21"
+    ip_passerelle="192.168.3.24"
     frequence_cam=0
     longitude_base= 4.0333
     latitude_base=49.25
+    heading=0
     cmpt_tour_boucle=0
     variation_degre_1km_longitude= 0.01
     variation_degre_1km_latitude= 0.008
@@ -421,27 +458,18 @@ if __name__ == '__main__' :
             
             print("info: scénario authentification")
             
-            # Construction du message
-            msg_cam = gen_json_cam(stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
+            scenario1(fichier_signature,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp,fichier_paire_de_cles,ip_passerelle)
+            exit(1)
 
-            print("msg_cam:")
-            print(msg_cam)
-
-            #Signature du hash sha1 du message
-            signer_hash_sha1_message(msg_cam,fichier_paire_de_cles)
-
-            # envoi
-            scenario1_envoyer_cam(msg_cam,fichier_signature,certificat,stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
-
-             # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
-            if cmpt_tour_boucle == 10:
-                msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
-                print(msg_denm)
-                cmpt_tour_boucle=0
-            #endif
+            #  # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
+            # if cmpt_tour_boucle == 10:
+            #     msg_denm = gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_passerelle,timestamp)
+            #     print(msg_denm)
+            #     cmpt_tour_boucle=0
+            # #endif
 
             print("envoi à une fréquence de "+str(frequence_cam))
-            print(msg_cam)
+            #print(msg_cam)
             cmpt_tour_boucle+=1
             time.sleep(frequence_cam)
 

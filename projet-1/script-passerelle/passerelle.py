@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import json, time, threading, os
+import json, time, threading, os, sys, subprocess, base64
 import paho.mqtt.client as mqtt
 
 class MonThread (threading.Thread):
@@ -18,7 +18,6 @@ class MonThread (threading.Thread):
         print("THREAD: cmd1="+str(cmd1))
         print("THREAD:denm envoyé au centralisateur")
     #endef
-
 
 def generer_cles_rsa(fichier_pem):
 
@@ -39,19 +38,17 @@ def generer_cles_rsa(fichier_pem):
         
 #endef
 
-def extraire_cle_publique(fichier_pem_cles,fichier_pem_cle_publique):
+def recuperer_cle_publique(keypair,cle_pub):
 
-    if os.path.exists(fichier_pem_cle_publique) == False:
-        cmd="openssl rsa -in "+fichier_pem_cles+" -pubout -out "+fichier_pem_cle_publique
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-        print("info: clé publique extraite")
-    else:
-        print("info: clé publique déja extraite ")
-    #endif
+    cmd="openssl rsa -in "+keypair+" -pubout -out "+cle_pub
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: clé publique extraite")
 #endef
+
 
 def verifier_hash(hash_file,signature,certificatx509,cle_pub_certificat):
 
@@ -74,15 +71,48 @@ def on_message(client, userdata, msg):
 
 def on_cam(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    print("donnees:"+str(donnees))
-    print("stationId: "+str(donnees["stationId"] ) )
-    print("stationType : " +str(donnees["stationType"] ) )
-    print("timestamp : " +str(donnees["timestamp"] ) )
-    print("vitesse : " +str(donnees["vitesse"] ) )
-    print("heading : " +str(donnees["heading"] ) )
-    print("position GPS : ")
-    print("latitude : " + str(donnees["positionGPS"]["latitude"]))
-    print("longitude : " + str(donnees["positionGPS"]["longitude"]))
+    #print("info: données recu:"+str(donnees))
+
+    # dictionnaire={"data":dictionnaire_data,"signature":dictionnaire_signature,"certificat":dictionnaire_certificat}
+
+
+    # récupération des 3 éléments
+    data=donnees["data"]
+    certificat=donnees["data"]
+    signature=donnees["signature"]
+
+
+    print("\n")
+    print("data:")
+    print(data)
+
+    print("\n")
+    print("certificat")
+    print(certificat)
+
+    print("\n")
+    print("signature")
+    print(signature)
+
+
+    # désencoder base64
+    signature_binaire=base64.b64decode(signature["signature_base64_binaire"])
+
+    print("\n")
+    print("signature binaire")
+    print(signature_binaire)
+
+    # écriture binaire de la signature
+
+    f = open('signature-recu.sig', "wb")
+    f.write(signature_binaire)
+    f.close()
+
+    print("\n")
+    print("info: base64 signature recu:")
+    print(signature["signature_base64_binaire"])
+
+
 #endef
 def on_denm(client, userdata, msg):
     print("\n##########DENM détecté##########")
@@ -163,23 +193,129 @@ def appartient_plage_horaire(plage, t1):
     h2, m2, s2 = timestamp_hhmmss(t1)
 #endef
 
+def generer_csr(fichier_pem,csr):
+
+    # création du fichier Certificate Signing Request (CSR)
+    cmd="openssl req -new -key "+fichier_pem+" -out "+csr+" -batch"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+    print("info: fichier csr créé")
+#endef
+def generer_json_csr(fichier_csr):
+
+
+    cmd="cat "+fichier_csr
+    try:
+        var=subprocess.check_output(cmd, shell = True)
+        var=var.decode()
+        var=str(var)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+    # récupération de l'ip de l'acteur demandant un certificat
+    cmd="ip addr show | grep enp0s3 | grep inet | awk '{print $2}'"
+    try:
+        var2=subprocess.check_output(cmd, shell = True)
+        var2=var2.decode()
+        var2=str(var2)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+    if var and var2 : # vérifie si var et var2 existent
+
+        # création d'un dictionnaire
+        dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
+
+        #conversion du dictionnaire en json
+        json_data=json.dumps(dictionnaire)
+
+        # cmd="rm "+fichier_csr
+        # print("SUPPRESSION:"+cmd)
+        # try:
+        #     os.system(cmd)
+        # except Exception as e:
+        #     sys.stderr.write(e.message+"\n")
+        #     exit(1)
+
+        return json_data
+    #endif
+
+   
+#endef
+
+def envoyer_csr(csr,ip_server_mqtt):
+
+    cmd="mosquitto_pub -h "+str(ip_server_mqtt )+" -q 1 "+"-u vehicule -t config/csr -m '"+str(csr)+"'" 
+    #print(cmd)
+    
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+    print("info: csr envoyé à l'autorité de certification")
+    #endif
+    
+#endef
+
+def on_config(client, userdata, msg):
+    donnees = json.loads(msg.payload.decode("utf-8"))
+    certificat=str(donnees["certificatX509"] )
+
+    # print("info: donnees")
+    # print(certificat)
+
+    # écriture du certificat dans un fichier
+    cmd="echo \""+certificat+"\" > certificatx509.crt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    
+    print("info: le certificatX509 a été récupéré ")
+
+#endef
+
 if __name__ == "__main__":
 
-    generer_cles_rsa("paire-de-cles-rsa.pem")
-    extraire_cle_publique("paire-de-cles-rsa.pem","cle-publique.pem")
+    fichier_paire_de_cles="keypair.pem"
+    ip_autorite="192.168.3.26"
+    fichier_signature="hash.sig"
+    cle_pub_certificat="pubx509.pem"
+    cle_pub="pub.pem"
+    fichier_csr="csr.pem"
+    certificat="certificatx509.crt"
+
+    generer_cles_rsa(fichier_paire_de_cles)
+    recuperer_cle_publique(fichier_paire_de_cles,cle_pub)
+    generer_csr(fichier_paire_de_cles,fichier_csr)
+    csr_json=generer_json_csr(fichier_csr)
+    envoyer_csr(csr_json,ip_autorite)
+
     client = mqtt.Client()
     client.on_message = on_message
 
     client.message_callback_add("cam/#", on_cam)
     client.message_callback_add("denm/#", on_denm)
+    client.message_callback_add("config/#", on_config)
+
     client.connect('127.0.0.1', 1883, 60)
 
+    client.subscribe("config/certificatX509")
     client.subscribe("cam/auto")
     client.subscribe("cam/moto")
     client.subscribe("cam/camion")
-
     client.subscribe("denm/auto")
     client.subscribe("denm/moto")
     client.subscribe("denm/camion")
 
+    print("info: attente de requêtes des véhicules")
     client.loop_forever()
