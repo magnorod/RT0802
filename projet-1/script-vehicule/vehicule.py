@@ -6,23 +6,23 @@ import paho.mqtt.client as mqtt
 random.seed()
 
 def generer_cles_rsa(fichier_pem):
+    # création de la paire de  clés RSA 2048
+    cmd="openssl genrsa -out "+fichier_pem+" 2048"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: paire de clés RSA 2048 créé")
 
-    # on vérifie si la paire de clés existe déja
-    if os.path.exists(fichier_pem) == False:
-
-        # création de la paire de  clés RSA 2048
-        cmd="openssl genrsa -out "+fichier_pem+" 2048"
-        try:
-            os.system(cmd)
-        except Exception as e:
-            sys.stderr.write(e.message+"\n")
-            exit(1)
-
-        
-        print("info: paire de clés RSA 2048 créé")
-    else:
-        print("info: la paire de clés RSA existe déja ")
-    #endif
+    # extraction de la clé publique
+    cmd="openssl rsa -in "+fichier_pem+" -pubout -out pub.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: la clé publique du véhicule a été extraite")
 #endef
 
 def generer_csr(fichier_pem,csr):
@@ -100,10 +100,10 @@ def envoyer_csr(csr,ip_server_mqtt):
 
 def gen_stationId():
 
-     # récupération hostname (auto,moto,camion)
+    # récupération hostname (auto,moto,camion)
     hostname = subprocess.check_output(['hostname'])
-    hostname=hostname.decode()
-    hostname=str(hostname)
+    hostname = hostname.decode()
+    hostname = str(hostname)
 
     # corrélation entre le hostname et le stationId
     if "auto" in hostname :
@@ -120,34 +120,15 @@ def gen_stationId():
 
 
 def gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp):
-
-    #msg_cam = '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"vitesse":'+str(vitesse)+',"heading":'+str(heading)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
-    
-    #print(certificat)
     dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
     dictionnaire = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"vitesse":vitesse, "heading":heading, "positionGPS":dictionnaire_positionGPS }
-
-    #conversion du dictionnaire en json
-    #json_data=json.dumps(dictionnaire
-    
     return dictionnaire
-
 #endef
 
 def gen_dictionnaire_denm(stationId,stationType,cause,sub_cause,latitude,longitude,timestamp):
-
-    #msg_denm =  '{"stationId":'+str(stationId)+',"stationType":'+str(stationType)+',"timestamp":'+str(timestamp)+',"cause":'+str(cause)+',"sub-cause":'+str(sub_cause)+',"positionGPS":{"longitude":'+str(longitude)+',"latitude":'+str(latitude)+'}'+'}'
-    
-    
     dictionnaire_positionGPS = {"longitude":longitude,"latitude":latitude}
     dictionnaire = {"stationId":stationId,"stationType":stationType,"timestamp":timestamp,"cause":cause, "sub-cause":sub_cause, "positionGPS":dictionnaire_positionGPS }
-
-    #conversion du dictionnaire en json
-    #json_data=json.dumps(dictionnaire)
-    
-
     return dictionnaire
-
 #endef
 
 def gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp):
@@ -239,10 +220,15 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
 
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    certificat=str(donnees["certificatX509"] )
+    print("info :donnness")
+    print(donnees)
+    certificat=donnees["certificatX509"]
+    print("info: certif recu")
+    print(certificat)
 
-    # print("info: donnees")
-    # print(certificat)
+    certif_ac=str(donnees["certif_ac"] )
+    print("info: certif_ac")
+    print(certif_ac)
 
     # écriture du certificat dans un fichier
     cmd="echo \""+certificat+"\" > certificatx509.crt"
@@ -252,9 +238,15 @@ def on_config(client, userdata, msg):
         sys.stderr.write(e.message+"\n")
         exit(1)
     
-    print("info: le certificatX509 a été récupéré ")
+    print("info: le certificatX509 de la station a été récupéré ")
 
+    # écriture du certificat de l'AC
+    f = open('certif_ac.crt', "w")
+    f.write(str(certif_ac))
+    f.close()
+    print("info: le certificatX509 de l'AC a été récupéré")
 #endef
+
 
 def on_message(client, userdata, msg):
     pass
@@ -273,18 +265,6 @@ def choix_scenario():
 #endef
 
 
-def recuperer_cle_publique(keypair,cle_pub):
-
-    cmd="openssl rsa -in "+keypair+" -pubout -out "+cle_pub
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: clé publique extraite")
-#endef
-
-
 def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
     cmd="openssl x509 -pubkey -noout -in "+certificatx509+" > "+cle_pub_certificat
     print(cmd)
@@ -295,11 +275,6 @@ def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
         exit(1)
 #endef
 
-def bin2hex(str1):
-    bytes_str = bytes(str1, 'utf-8')
-    return binascii.hexlify(bytes_str)
-#endef
-
 def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp,fichier_paire_de_cles,ip_passerelle):
     
     # construction du message CAM
@@ -308,37 +283,28 @@ def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse
     # print("dictionnaire_data:")
     # print(dictionnaire_data)
 
-    # transfromation du dictionnaire en json
+    # transformation du dictionnaire en json
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
     # hachage puis signature du json
     signer_hash_sha1_message(json_dictionnaire_data,fichier_paire_de_cles)
 
+    fichier_signature_base64="hash.sig_base64.txt"
+    # encodage de la signature en base 64
+    encoder_signature_base64(fichier_signature_base64)
+
     # récupération du certificat
     fichier = open(certificat, "r")
-    var=fichier.read()
+    certificat_station=fichier.read()
     fichier.close()
 
-    # ajout du certificat au dictionnaire_certificat
-    dictionnaire_certificat={"certificat":str(var)}
-
-    # récupération de la signature (lecture binaire nécessaire)
-    fichier = open(signature_du_hash_de_data, "rb")
-    var=fichier.read()
+    # récupération de la signature encodée en base64
+    fichier = open(fichier_signature_base64, "r")
+    signature_base64=fichier.read()
     fichier.close()
 
-    print("info: signature binaire:")
-    print(var)
-    print("\n")
-    
-    # encodage du binaire en base64 (sinon envoi impossible)
-    var=base64.b64encode(var)
-
-    # ajout de la signature au dictionnaire_signature
-    dictionnaire_signature={"signature_base64_binaire":str(var)}
-  
     # regroupement de l'ensemble des dictionnaires
-    dictionnaire={"data":dictionnaire_data,"signature":dictionnaire_signature,"certificat":dictionnaire_certificat}
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station}
 
     #conversion du dictionnaire final en json
     json_data=json.dumps(dictionnaire)
@@ -363,6 +329,14 @@ def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse
     print("info: message envoyé")
 #endef
 
+def encoder_signature_base64(fichier_signature):
+    cmd="openssl base64 -in hash.sig -out "+fichier_signature
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+#endef
 
 def signer_hash_sha1_message(message,fichier_paire_de_cles):
 
@@ -374,16 +348,14 @@ def signer_hash_sha1_message(message,fichier_paire_de_cles):
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-    cmd="openssl dgst -sign "+fichier_paire_de_cles+" -keyform PEM -sha1 -out hash.sig -binary message.txt"
-    #print(cmd)
+    #signature avec la clé privée du véhicule
+    cmd="openssl dgst -sha1 -sign "+fichier_paire_de_cles+" -keyform PEM -out hash.sig message.txt"
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
 #endef 
-
-
 
 if __name__ == '__main__' :
 
@@ -397,7 +369,6 @@ if __name__ == '__main__' :
     certificat="certificatx509.crt"
     
     generer_cles_rsa(fichier_paire_de_cles)
-    recuperer_cle_publique(fichier_paire_de_cles,cle_pub)
     generer_csr(fichier_paire_de_cles,fichier_csr)
     csr_json=generer_json_csr(fichier_csr)
     envoyer_csr(csr_json,ip_autorite)

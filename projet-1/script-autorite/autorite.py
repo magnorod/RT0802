@@ -39,13 +39,18 @@ def envoyer_certificat(ip_desti,topic,certificat):
     ip_desti=ip_desti[0:len(ip_desti)-4]
 
 
-    # création d'un dictionnaire qui va contenir le certificat
-    certificat=subprocess.check_output(["cat", "public-produit.crt"])
-    certificat=certificat.decode()
-    certificat=str(certificat)
-
-
-    dictionnaire = {"certificatX509":certificat}
+    # lecture du certificat généré pour la station
+    f = open('public-produit.crt', "r")
+    certificat=f.read()
+    f.close()
+    
+    # lecture du certificat de l'AC
+    f = open('public-autorite.crt', "r")
+    certif_ac=f.read()
+    f.close()
+  
+    # regroupement de l'ensemble des dictionnaires
+    dictionnaire={"certificatX509":certificat,"certif_ac":certif_ac}
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
@@ -56,6 +61,7 @@ def envoyer_certificat(ip_desti,topic,certificat):
     except Exception as e:
         print(e.message)
     print("thread: certificat X509 envoyé au demandeur du CSR")
+
 #endef
 
 def on_message(client, userdata, msg):
@@ -98,66 +104,58 @@ def signer_certificat(csr,private_key):
 #endef
 
 
-def generer_certificat_autorite(fichier_pem):
-
-    if os.path.exists(fichier_pem) == False: # on vérifie si la paire de clés existe déja
-
-        # création de la paire de  clés RSA 2048
-        cmd="openssl genrsa 2048 > "+fichier_pem
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-
-        print("info: paire de clé ok")
-        
-
-        cmd="openssl rsa -in "+fichier_pem+" -pubout -out pub.pem"
-        try:
-            os.system(cmd)
-        except Exception as e:
-            sys.stderr.write(e.message+"\n")
-            exit(1)
-        print("info: clé publique extraite")
-
-        # création du fichier Certificate Signing Request (CSR) avec la clé privée
-        cmd="openssl req -new -key "+fichier_pem+" -out csr-autorite.pem -batch"
-
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-
-        print("info: fichier CSR créé")
-
-        # signature du certificat
-        cmd="openssl x509 -req -days 365 -in csr-autorite.pem -signkey "+fichier_pem+" -out public-autorite.crt"
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-        print("info: certificat X509 créé")
+def generer_certificat_autorite(cle_privee):
 
 
-        # supppression du csr
-        cmd="rm csr-autorite.pem"
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
+    # création de la paire de  clés RSA 2048
+    cmd="openssl genrsa 2048 > "+cle_privee
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+
+    print("info: paire de clé ok")
+    
+    #extraction de la clé publique
+    cmd="openssl rsa -in "+cle_privee+" -pubout -out pub.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: clé publique extraite")
+
+    # création du fichier Certificate Signing Request (CSR) avec la clé privée
+    cmd="openssl req -new -key "+cle_privee+" -out csr-autorite.pem -batch"
+
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+
+    print("info: fichier CSR créé")
+
+    # signature du certificat
+    cmd="openssl x509 -req -days 365 -in csr-autorite.pem -signkey "+cle_privee+" -out public-autorite.crt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
+    print("info: certificat X509 créé")
 
 
-    else:
-        print("info: le certificat X509 de l autorite existe deja")
-    #endif
+    # supppression du csr
+    cmd="rm csr-autorite.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        print(e.message)
 #endef
-
-
 
 if __name__ == '__main__' :
 
     generer_certificat_autorite("keypair.pem")
-    
+
     #attente d'une clé publique d'un véhicule ou de la station
     client = mqtt.Client()
     client.on_message = on_message
@@ -167,5 +165,4 @@ if __name__ == '__main__' :
     print("info: en attente de CSR")
     client.loop_forever()
 
-   
 #endif
