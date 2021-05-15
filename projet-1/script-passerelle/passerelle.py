@@ -76,7 +76,7 @@ def on_cam(client, userdata, msg):
     print("info: écriture de data dans un fichier tmp")
     
     # écriture du certif
-    f = open('certif_recu.crt', "w")
+    f = open('certif-recu.pem', "w")
     f.write(certificat)
     f.close()
     print("info: écriture du certificat dans un fichier tmp")
@@ -100,13 +100,49 @@ def on_cam(client, userdata, msg):
 
     print("info: écriture de la signature binaire dans le fichier signature_recu.sig ")
 
+    # lecture du  certificatx509 recu
 
+    print("certificat_recu:")
+    print(certificat)
+
+
+    ###############VERIFICATION
+
+
+    #lecture binaire du certificat-recu
+    f = open('certif-recu.pem', "rb")
+    certif_bytes=f.read()
+    f.close()
+
+    cert = x509.load_pem_x509_certificate(certif_bytes)
+    print("info: chargement du certificat x509 recu")
+
+
+    #lecture binaire de la clé publique de l'AC
+    f = open('cle_publique_ac.pem', "rb")
+    cle_public_ac=f.read()
+    f.close()
     
+
+
+    cle_public_ac.verify(
+     signature_certif_recu,
+     message,
+     padding.PSS(
+         mgf=padding.MGF1(hashes.SHA256()),
+         salt_length=padding.PSS.MAX_LENGTH
+     ),
+     hashes.SHA256()
+     )
+
+
+
+
     ####### a) Vérifier le certificat de la station
     ##### Partie 1
 
     # # récupération de la clé publique du certif recu
-    # cmd="openssl x509 -pubkey -out cle_publique_certif_recu.pem -in certif_recu.crt"
+    # cmd="openssl x509 -pubkey -out cle_publique_certif_recu.pem -in certif-recu.pem"
     # try:
     #     os.system(cmd)
     # except Exception as e:
@@ -184,18 +220,18 @@ def on_cam(client, userdata, msg):
 
 
     # #dechiffrer le condensat du certificat recu avec la clé publique de l'AC
-    # cmd="openssl rsautl -verify -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt"
+    # cmd="openssl rsautl -verify -in certif-recu.pem -pubin cle_publique_ac.pem -out dedigest.txt"
     # var=subprocess.check_output(cmd, shell = True)
     # var=var.decode()
     # var=str(var)
 
-    # # openssl rsautl -decrypt -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt
-    # # openssl x509 -in certif_recu.crt -text -noout -certopt
-    # # openssl x509 -in certif_recu.crt  -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame
+    # # openssl rsautl -decrypt -in certif-recu.pem -pubin cle_publique_ac.pem -out dedigest.txt
+    # # openssl x509 -in certif-recu.pem -text -noout -certopt
+    # # openssl x509 -in certif-recu.pem  -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame
 
 
     # # récupération de la clé publique du certificat reçu
-    # cmd="openssl x509 -pubkey -noout -in certif_recu.crt"
+    # cmd="openssl x509 -pubkey -noout -in certif-recu.pem"
     # try:
     #     var=subprocess.check_output(cmd, shell = True)
     #     var=var.decode()
