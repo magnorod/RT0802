@@ -1,6 +1,11 @@
 #!/usr/bin/python3
-import json, time, threading, os, sys, subprocess
+import json, os, subprocess, threading, sys, datetime, time, random,base64
 import paho.mqtt.client as mqtt
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 class MonThread (threading.Thread):
     def __init__(self, donnees):
@@ -18,25 +23,6 @@ class MonThread (threading.Thread):
         print("THREAD: cmd1="+str(cmd1))
         print("THREAD:denm envoyé au centralisateur")
     #endef
-
-def generer_cles_rsa(fichier_pem):
-
-    # on vérifie si la paire de clés existe déja
-    if os.path.exists(fichier_pem) == False:
-
-        # création de la paire de  clés RSA 2048
-        cmd="openssl genrsa -out "+fichier_pem+" 2048"
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
-        
-        print("info: paire de clés RSA 2048 créé")
-    else:
-        print("info: la paire de clés RSA existe déja ")
-    #endif
-        
-#endef
 
 def recuperer_cle_publique(keypair,cle_pub):
 
@@ -74,17 +60,14 @@ def on_cam(client, userdata, msg):
     # récupération des 3 éléments
     data=donnees["data"]
     certificat=donnees["certificat_station"]
-    signature=donnees["signature_base64"]
+    signature_base64=donnees["signature_base64"]
 
-    print("info: data  recu:")
-    print(data)
+    # print("info: data  recu:")
+    # print(data)
 
-    print("info: certificat recu:")
-    print(certificat)
+    # print("info: certificat recu:")
+    # print(certificat)
 
-    print("info: signature base64  recu:")
-    
-    print(signature)
 
     # écriture de data 
     f = open('data_recu.txt', "w")
@@ -97,117 +80,74 @@ def on_cam(client, userdata, msg):
     f.write(certificat)
     f.close()
     print("info: écriture du certificat dans un fichier tmp")
-    
-    # écriture de la signature encodée en base64 dans un fichier temporaire
-    f = open('signature_base64_recu.txt', "w")
-    f.write(signature)
+
+
+    # print("info: signature base64 recu:")
+    # print(signature_base64)
+
+    base64_bytes = signature_base64.encode("ascii")
+    signature_binaire = base64.b64decode(base64_bytes)
+    print("info: signature base64 binaire  décodée")
+
+
+    # print("info: signature bianaire:")
+    # print(signature_binaire)
+
+    # écriture binaire de la signature
+    f = open('signature_recu.sig', "wb")
+    f.write(signature_binaire)
     f.close()
 
-    print("info: écriture de la signature dans un fichier tmp")
-    
-    # décoder la signature
-    cmd="openssl base64 -d -in signature_base64_recu.txt -out signature_recu.sig"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: signature base64 décodée")
+    print("info: écriture de la signature binaire dans le fichier signature_recu.sig ")
 
+
+    
     ####### a) Vérifier le certificat de la station
     ##### Partie 1
 
-    # récupération de la clé publique du certif recu
-    cmd="openssl x509 -pubkey -out cle_publique_certif_recu.pem -in certif_recu.crt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: récupération de la clé publique du certif reçu")
+    # # récupération de la clé publique du certif recu
+    # cmd="openssl x509 -pubkey -out cle_publique_certif_recu.pem -in certif_recu.crt"
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: récupération de la clé publique du certif reçu")
 
-    # récupération de la clé publique de l'AC (située dans le certificat)
-    cmd="openssl x509 -pubkey -out cle_publique_ac.pem -in certif_ac.crt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: récupération de la clé publique de l'AC ")
+    # # extract hex of signature
+    # cmd="openssl x509 -in cle_publique_certif_recu.pem -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame | grep -v 'Signature Algorithm' | tr -d '[:space:]:'"
+    # try:
+    #     var=subprocess.check_output(cmd, shell = True)
+    #     var=var.decode()
+    #     hex_signature=str(var)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: extract hex of signature")
+    # print(hex_signature)
+    # # create signature dump
+    # cmd="echo "+hex_signature+" | xxd -r -p > certif_recu_sig.bin"
+    # print("\n")
+    # print(cmd)
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: create signature dump")
 
-   
-    # extract hex of signature
-    cmd="openssl x509 -in cle_publique_certif_recu.pem -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame | grep -v 'Signature Algorithm' | tr -d '[:space:]:'"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        hex_signature=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: extract hex of signature")
-    print(hex_signature)
-    # create signature dump
-    cmd="echo "+hex_signature+" | xxd -r -p > certif_recu_sig.bin"
-    #echo 6c3fab065cd9f4d6a895fd5b73f31e47145e50157837ae3082b0a1090f58dee5363bdbb73924dd85112dc2471fb37cf19e21b05b7605f3ddefb7c9ad2f84d12d2ae3b3a9c2fa291e27d7cae1a7ae2e23301dce8071e600b60eba1751ef1af8ad4c87c772764e92562d271c5985dd2d9ced3a16beea7cb0bc213da38aa6fed8ceeb9e9b5fa63420057f478587aa5593c06d819ce9d653b02cb6181876275ad8818045850970fdcb774b25349266d7d664c349351dd3294f58cf98b939943c35c5170d6a19612c4775f1e2afa2a2605eab1cda91e8a08a7060ea5079cbbf2817f9ace1995623ac9ade6c90e4443e72cb1a0eee658d79698192213ad73d194130f6 | xxd -r -p > certif_recu_sig.bin
-    print("\n")
-    print(cmd)
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: create signature dump")
+    # # Déchiffrer la signature du certificat recu avec la clé publique de l'AC
+    # cmd="openssl rsautl -verify -inkey cle_publique_ac.pem -in certif_recu_sig.bin -pubin > certif_recu_sig_decrypted.bin"
+    # try:
+    #     var=subprocess.check_output(cmd, shell = True)
+    #     var=var.decode()
+    #     decrypt_signature=str(var)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: decrypt signature")
 
-    # Déchiffrer la signature du certificat recu avec la clé publique de l'AC
-    cmd="openssl rsautl -verify -inkey cle_publique_ac.pem -in certif_recu_sig.bin -pubin > certif_recu_sig_decrypted.bin"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        decrypt_signature=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: decrypt signature")
-
-    cmd="openssl asn1parse -inform der -in certif_recu_sig_decrypted.bin | awk '{ print $9 }' | cut -d':' -f2"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        var=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: hash du certificat")
-    print(var)
-    
-    ##### Partie2
-
-    # récupération du body du certificat
-    cmd="openssl asn1parse -in cle_publique_certif_recu.pem -strparse 4 -out cert_body.bin -noout"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: body du certificat récupéré")
-
-    # calcul du hash du body
-    
-    cmd="openssl dgst -sha256 cert_body.bin"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        var=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: hash calculé")
-    print(var)
-
-
-    # dechiffrer le condensat du certificat recu avec la clé publique de l'AC
-    # cmd="openssl rsautl -verify -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt"
+    # cmd="openssl asn1parse -inform der -in certif_recu_sig_decrypted.bin | awk '{ print $9 }' | cut -d':' -f2"
     # try:
     #     var=subprocess.check_output(cmd, shell = True)
     #     var=var.decode()
@@ -215,9 +155,43 @@ def on_cam(client, userdata, msg):
     # except Exception as e:
     #     sys.stderr.write(e.message+"\n")
     #     exit(1)
-    #openssl rsautl -decrypt -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt
-    #openssl x509 -in certif_recu.crt -text -noout -certopt
-    #openssl x509 -in certif_recu.crt  -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame
+    # print("info: hash du certificat")
+    # print(var)
+    
+    # ##### Partie2
+
+    # # récupération du body du certificat
+    # cmd="openssl asn1parse -in cle_publique_certif_recu.pem -strparse 4 -out cert_body.bin -noout"
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: body du certificat récupéré")
+
+    # # calcul du hash du body
+    
+    # cmd="openssl dgst -sha256 cert_body.bin"
+    # try:
+    #     var=subprocess.check_output(cmd, shell = True)
+    #     var=var.decode()
+    #     var=str(var)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: hash calculé")
+    # print(var)
+
+
+    # #dechiffrer le condensat du certificat recu avec la clé publique de l'AC
+    # cmd="openssl rsautl -verify -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt"
+    # var=subprocess.check_output(cmd, shell = True)
+    # var=var.decode()
+    # var=str(var)
+
+    # # openssl rsautl -decrypt -in certif_recu.crt -pubin cle_publique_ac.pem -out dedigest.txt
+    # # openssl x509 -in certif_recu.crt -text -noout -certopt
+    # # openssl x509 -in certif_recu.crt  -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame
 
 
     # # récupération de la clé publique du certificat reçu
@@ -240,20 +214,9 @@ def on_cam(client, userdata, msg):
     #     print("info: le certificat n'a pas été signé par l'AC")
     # #endif
 
-
-
-
     #Vérifier que l’empreinte signée a bien été signée avec le certificat envoyé
 
     # La passerelle déchiffre la signature reçu en utilisant la clé publique de la station qui est contenue dans le certificat reçu
-
-
-
-
-
-
-
-
 
 #endef
 def on_denm(client, userdata, msg):
@@ -335,22 +298,54 @@ def appartient_plage_horaire(plage, t1):
     h2, m2, s2 = timestamp_hhmmss(t1)
 #endef
 
-def generer_csr(fichier_pem,csr):
+def generer_csr():
 
-    # création du fichier Certificate Signing Request (CSR)
-    cmd="openssl req -new -key "+fichier_pem+" -out "+csr+" -batch"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
+    # Generate our key
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
 
-    print("info: fichier csr créé")
+    )
+
+    # Write our key to disk for safe keeping
+    with open("key.pem", "wb") as f:
+     f.write(key.private_bytes(
+         encoding=serialization.Encoding.PEM,
+         format=serialization.PrivateFormat.TraditionalOpenSSL,
+         encryption_algorithm=serialization.NoEncryption(),
+    ))
+
+    print("info: génération clés OK")
+
+    # Generate a CSR
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        # Provide various details about who we are.
+        x509.NameAttribute(NameOID.COUNTRY_NAME, u"FR"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"France"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, u"Reims"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Alexis et Marc"),
+        x509.NameAttribute(NameOID.COMMON_NAME, u"alexis-marc.fr"),
+        ])).add_extension(
+        x509.SubjectAlternativeName([
+            # Describe what sites we want this certificate for.
+            x509.DNSName(u"alexis-marc.fr"),
+            x509.DNSName(u"www.alexis-marc.fr"),
+            x509.DNSName(u"subdomain.alexis-marc.fr"),
+        ]),
+        critical=False,
+    # Sign the CSR with our private key.
+    ).sign(key, hashes.SHA256())
+
+    # Write our CSR out to disk.
+    with open("csr.pem", "wb") as f:
+        f.write(csr.public_bytes(serialization.Encoding.PEM))
+    
+    print("info: CSR généré")
 #endef
-def generer_json_csr(fichier_csr):
 
 
-    cmd="cat "+fichier_csr
+def generer_json_csr():
+    cmd="cat csr.pem"
     try:
         var=subprocess.check_output(cmd, shell = True)
         var=var.decode()
@@ -369,27 +364,16 @@ def generer_json_csr(fichier_csr):
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-    if var and var2 : # vérifie si var et var2 existent
+    # création d'un dictionnaire
+    dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
 
-        # création d'un dictionnaire
-        dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
 
-        #conversion du dictionnaire en json
-        json_data=json.dumps(dictionnaire)
-
-        # cmd="rm "+fichier_csr
-        # print("SUPPRESSION:"+cmd)
-        # try:
-        #     os.system(cmd)
-        # except Exception as e:
-        #     sys.stderr.write(e.message+"\n")
-        #     exit(1)
-
-        return json_data
-    #endif
-
-   
+    return json_data
+    
 #endef
+
 
 def envoyer_csr(csr,ip_server_mqtt):
 
@@ -402,55 +386,42 @@ def envoyer_csr(csr,ip_server_mqtt):
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-    print("info: csr envoyé à l'autorité de certification")
+    print("info: CSR envoyée à l'autorité de certification")
     #endif
     
 #endef
 
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    print("info :donnness")
-    print(donnees)
+    # print("info :données reçu")
+    # print(donnees)
     certificat=donnees["certificatX509"]
-    print("info: certif recu")
-    print(certificat)
+    print("info: certificatx509 recu")
+    #print(certificat)
 
-    certif_ac=str(donnees["certif_ac"] )
-    print("info: certif_ac")
-    print(certif_ac)
+    cle_publique_ac=str(donnees["cle_publique_ac"] )
+    print("info: clé publique de l'autorité reçu")
+    #print(cle_publique_ac)
 
-    # écriture du certificat dans un fichier
-    cmd="echo \""+certificat+"\" > certificatx509.crt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    
+    f = open('certificatx509.crt', "w")
+    f.write(str(certificat))
+    f.close()
     print("info: le certificatX509 de la station a été récupéré ")
 
-    # écriture du certificat de l'AC
-    f = open('certif_ac.crt', "w")
-    f.write(str(certif_ac))
+    # écriture de la clé publique de l'AC
+    f = open('cle_publique_ac.pem', "w")
+    f.write(str(cle_publique_ac))
     f.close()
-    print("info: le certificatX509 de l'AC a été récupéré")
+    print("info: la clé publique de l'AC a été récupérée")
 #endef
 
 
 if __name__ == "__main__":
 
-    fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.3.26"
-    fichier_signature="hash.sig"
-    cle_pub_certificat="pubx509.pem"
-    cle_pub="pub.pem"
-    fichier_csr="csr.pem"
-    certificat="certificatx509.crt"
+    ip_autorite="192.168.3.35"
 
-    generer_cles_rsa(fichier_paire_de_cles)
-    recuperer_cle_publique(fichier_paire_de_cles,cle_pub)
-    generer_csr(fichier_paire_de_cles,fichier_csr)
-    csr_json=generer_json_csr(fichier_csr)
+    generer_csr()
+    csr_json=generer_json_csr()
     envoyer_csr(csr_json,ip_autorite)
 
     client = mqtt.Client()
@@ -470,5 +441,4 @@ if __name__ == "__main__":
     client.subscribe("denm/moto")
     client.subscribe("denm/camion")
 
-    print("info: attente de requêtes des véhicules")
     client.loop_forever()

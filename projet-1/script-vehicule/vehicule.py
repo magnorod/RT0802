@@ -1,47 +1,61 @@
 #!/usr/bin/python3
-import random, time, sys, os, subprocess, json, base64
+import json, os, subprocess, threading, sys, datetime, time, random,base64
 import paho.mqtt.client as mqtt
-
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 # initialisation graine random
 random.seed()
 
-def generer_cles_rsa(fichier_pem):
-    # création de la paire de  clés RSA 2048
-    cmd="openssl genrsa -out "+fichier_pem+" 2048"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: paire de clés RSA 2048 créé")
+def generer_csr():
 
-    # extraction de la clé publique
-    cmd="openssl rsa -in "+fichier_pem+" -pubout -out pub.pem"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: la clé publique du véhicule a été extraite")
+    # Generate our key
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+
+    )
+
+    # Write our key to disk for safe keeping
+    with open("key.pem", "wb") as f:
+     f.write(key.private_bytes(
+         encoding=serialization.Encoding.PEM,
+         format=serialization.PrivateFormat.TraditionalOpenSSL,
+         encryption_algorithm=serialization.NoEncryption(),
+    ))
+
+    print("info: génération clés OK")
+
+    # Generate a CSR
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        # Provide various details about who we are.
+        x509.NameAttribute(NameOID.COUNTRY_NAME, u"FR"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"France"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, u"Reims"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Alexis et Marc"),
+        x509.NameAttribute(NameOID.COMMON_NAME, u"alexis-marc.fr"),
+        ])).add_extension(
+        x509.SubjectAlternativeName([
+            # Describe what sites we want this certificate for.
+            x509.DNSName(u"alexis-marc.fr"),
+            x509.DNSName(u"www.alexis-marc.fr"),
+            x509.DNSName(u"subdomain.alexis-marc.fr"),
+        ]),
+        critical=False,
+    # Sign the CSR with our private key.
+    ).sign(key, hashes.SHA256())
+
+    # Write our CSR out to disk.
+    with open("csr.pem", "wb") as f:
+        f.write(csr.public_bytes(serialization.Encoding.PEM))
+    
+    print("info: CSR généré")
 #endef
 
-def generer_csr(fichier_pem,csr):
-
-    # création du fichier Certificate Signing Request (CSR)
-    cmd="openssl req -new -key "+fichier_pem+" -out "+csr+" -batch"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-
-    print("info: fichier csr créé")
-#endef
-
-def generer_json_csr(fichier_csr):
-
-
-    cmd="cat "+fichier_csr
+def generer_json_csr():
+    cmd="cat csr.pem"
     try:
         var=subprocess.check_output(cmd, shell = True)
         var=var.decode()
@@ -60,26 +74,14 @@ def generer_json_csr(fichier_csr):
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-    if var and var2 : # vérifie si var et var2 existent
+    # création d'un dictionnaire
+    dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
 
-        # création d'un dictionnaire
-        dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
 
-        #conversion du dictionnaire en json
-        json_data=json.dumps(dictionnaire)
+    return json_data
 
-        # cmd="rm "+fichier_csr
-        # print("SUPPRESSION:"+cmd)
-        # try:
-        #     os.system(cmd)
-        # except Exception as e:
-        #     sys.stderr.write(e.message+"\n")
-        #     exit(1)
-
-        return json_data
-    #endif
-
-   
 #endef
 
 def envoyer_csr(csr,ip_server_mqtt):
@@ -220,33 +222,27 @@ def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt
 
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
-    print("info :donnness")
-    print(donnees)
+    # print("info :données reçu")
+    # print(donnees)
     certificat=donnees["certificatX509"]
-    print("info: certif recu")
-    print(certificat)
+    print("info: certificatx509 recu")
+    #print(certificat)
 
-    certif_ac=str(donnees["certif_ac"] )
-    print("info: certif_ac")
-    print(certif_ac)
+    cle_publique_ac=str(donnees["cle_publique_ac"] )
+    print("info: clé publique de l'autorité reçu")
+    #print(cle_publique_ac)
 
-    # écriture du certificat dans un fichier
-    cmd="echo \""+certificat+"\" > certificatx509.crt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    
+    f = open('certificatx509.crt', "w")
+    f.write(str(certificat))
+    f.close()
     print("info: le certificatX509 de la station a été récupéré ")
 
-    # écriture du certificat de l'AC
-    f = open('certif_ac.crt', "w")
-    f.write(str(certif_ac))
+    # écriture de la clé publique de l'AC
+    f = open('cle_publique_ac.pem', "w")
+    f.write(str(cle_publique_ac))
     f.close()
-    print("info: le certificatX509 de l'AC a été récupéré")
+    print("info: la clé publique de l'AC a été récupérée")
 #endef
-
 
 def on_message(client, userdata, msg):
     pass
@@ -275,7 +271,7 @@ def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
         exit(1)
 #endef
 
-def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp,fichier_paire_de_cles,ip_passerelle):
+def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle):
     
     # construction du message CAM
     dictionnaire_data=gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp)
@@ -286,27 +282,33 @@ def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse
     # transformation du dictionnaire en json
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
-    # hachage puis signature du json
-    signer_hash_sha1_message(json_dictionnaire_data,fichier_paire_de_cles)
+    # hachage sha1 puis signature du json
+    signer_hash_sha1_message(json_dictionnaire_data)
 
-    fichier_signature_base64="hash.sig_base64.txt"
-    # encodage de la signature en base 64
-    encoder_signature_base64(fichier_signature_base64)
+    # lecture binaire de la signature
+    f= open("hash.sig", "rb")
+    signature_binaire=f.read()
+    f.close()
 
+    #encodage base64 de la signature binaire
+    signature_base64_bytes=base64.b64encode(signature_binaire)
+    
+    print("info: signature_base64_bytes=")
+    print(signature_base64_bytes)
+
+    signature_base64_string = signature_base64_bytes.decode("ascii")
+
+    print("info: signature_base64_string=")
+    print(signature_base64_string)
+    
     # récupération du certificat
-    fichier = open(certificat, "r")
-    certificat_station=fichier.read()
-    fichier.close()
+    f= open("certificatx509.crt", "r")
+    certificat_station=f.read()
+    f.close()
 
-    # récupération de la signature encodée en base64
-    fichier = open(fichier_signature_base64, "r")
-    signature_base64=fichier.read()
-    fichier.close()
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64_string,"certificat_station":certificat_station}
 
-    # regroupement de l'ensemble des dictionnaires
-    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station}
-
-    #conversion du dictionnaire final en json
+    #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
 
     # construction requête bash
@@ -327,29 +329,17 @@ def scenario1(signature_du_hash_de_data,certificat,stationId,stationType,vitesse
         sys.stderr.write(e.message+"\n")
         exit(1)
     print("info: message envoyé")
+
 #endef
 
-def encoder_signature_base64(fichier_signature):
-    cmd="openssl base64 -in hash.sig -out "+fichier_signature
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-#endef
+def signer_hash_sha1_message(message):
 
-def signer_hash_sha1_message(message,fichier_paire_de_cles):
-
-    #création d'un fichier tmp
-    cmd="echo "+message+" > message.txt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
+    f = open('message.txt', "w")
+    f.write(str(message))
+    f.close()
 
     #signature avec la clé privée du véhicule
-    cmd="openssl dgst -sha1 -sign "+fichier_paire_de_cles+" -keyform PEM -out hash.sig message.txt"
+    cmd="openssl dgst -sha1 -sign key.pem -keyform PEM -out hash.sig message.txt"
     try:
         os.system(cmd)
     except Exception as e:
@@ -360,17 +350,14 @@ def signer_hash_sha1_message(message,fichier_paire_de_cles):
 if __name__ == '__main__' :
 
     #definitions des variables
-    fichier_paire_de_cles="keypair.pem"
-    ip_autorite="192.168.3.26"
-    fichier_signature="hash.sig"
+    ip_autorite="192.168.3.35"
+    ip_passerelle="192.168.3.36"
     cle_pub_certificat="pubx509.pem"
-    cle_pub="pub.pem"
-    fichier_csr="csr.pem"
     certificat="certificatx509.crt"
     
-    generer_cles_rsa(fichier_paire_de_cles)
-    generer_csr(fichier_paire_de_cles,fichier_csr)
-    csr_json=generer_json_csr(fichier_csr)
+    #generer_cles_rsa(fichier_paire_de_cles)
+    generer_csr()
+    csr_json=generer_json_csr()
     envoyer_csr(csr_json,ip_autorite)
 
     client = mqtt.Client()
@@ -388,7 +375,7 @@ if __name__ == '__main__' :
 
     stationId=gen_stationId()
     stationType_tab=(5,10,15)
-    ip_passerelle="192.168.3.24"
+    
     frequence_cam=0
     longitude_base= 4.0333
     latitude_base=49.25
@@ -429,8 +416,9 @@ if __name__ == '__main__' :
             
             print("info: scénario authentification")
             
-            scenario1(fichier_signature,certificat,stationId,stationType,vitesse,heading,latitude,longitude,timestamp,fichier_paire_de_cles,ip_passerelle)
+            scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle)
             exit(1)
+            
 
             #  # envoi d'un message denm à une fréquence de 1/10 de la fréquence d'envoi des msg CAM
             # if cmpt_tour_boucle == 10:

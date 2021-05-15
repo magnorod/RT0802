@@ -1,1 +1,1 @@
-{stationId: 3, stationType: 5, timestamp: 1619968535.320124, vitesse: 22, heading: 0, positionGPS: {longitude: 4.033361111111111, latitude: 49.25004888888889}}
+{"stationId": 3, "stationType": 15, "timestamp": 1621090451.8157969, "vitesse": 75, "heading": 0, "positionGPS": {"longitude": 4.033508333333333, "latitude": 49.250166666666665}}

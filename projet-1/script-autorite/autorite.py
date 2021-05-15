@@ -1,6 +1,11 @@
 #!/usr/bin/python3
-import json, os, subprocess, threading, sys
+import json, os, subprocess, threading, sys, datetime, time, random,base64
 import paho.mqtt.client as mqtt
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 class Thread (threading.Thread):
 
@@ -17,19 +22,17 @@ class Thread (threading.Thread):
         # print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
         
         # créer un fichier temporaire contenant la clé publique recu
-        cmd= 'echo "'+self.csr+'" > csr_recu.pem' 
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e.message)
+        f = open('csr-recu.pem', "w")
+        f.write(str(self.csr))
+        f.close()
         
         print("thread: fichier temporaire créé")
 
         # générer le certificat à partir de la clé publique reçu qui sera signée avec la clé privée de l'autorité
-        signer_certificat("csr_recu.pem","keypair.pem")
+        signer_certificat()
 
         # envoyer le certif
-        envoyer_certificat(self.ip_demandeur_certificat,"certificatX509","public-produit.crt")
+        envoyer_certificat(self.ip_demandeur_certificat,"certificatX509","certificat-produit.pem")
 
     #endef
 
@@ -40,17 +43,37 @@ def envoyer_certificat(ip_desti,topic,certificat):
 
 
     # lecture du certificat généré pour la station
-    f = open('public-produit.crt', "r")
+    f = open('certificat-produit.pem', "r")
     certificat=f.read()
     f.close()
+
+
+    # with open("key.pem", "rb") as key_file:
+    #  cle_publique_ac = serialization.load_pem_public_key(
+    #      key_file.read(),
+    #      password=None,
+    #  )
     
-    # lecture du certificat de l'AC
-    f = open('public-autorite.crt', "r")
-    certif_ac=f.read()
+    # serialization.load_pem_public_key()
+
+      #extraction de la clé publique
+    cmd="openssl rsa -in key.pem -pubout -out pub.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: clé publique extraite")
+
+    # lecture du certificat généré pour la station
+    f = open('pub.pem', "r")
+    cle_publique_ac=f.read()
     f.close()
-  
+
+
+
     # regroupement de l'ensemble des dictionnaires
-    dictionnaire={"certificatX509":certificat,"certif_ac":certif_ac}
+    dictionnaire={"certificatX509":certificat,"cle_publique_ac":cle_publique_ac}
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
@@ -89,9 +112,9 @@ def on_config(client, userdata, msg):
 
 #endef
 
-def signer_certificat(csr,private_key):
+def signer_certificat():
     # signature du certificat
-    cmd="openssl x509 -req -days 365 -in "+csr+" -signkey "+private_key+" -out public-produit.crt"
+    cmd="openssl x509 -req -days 365 -in csr-recu.pem -signkey key.pem -out certificat-produit.pem"
     #print(cmd)
     try:
         os.system(cmd)
@@ -99,62 +122,69 @@ def signer_certificat(csr,private_key):
         print(e.message)
     print("thread: certificat X509 signé par l'autorité")
 
-    recuperer_cle_publique_certificat("public-produit.crt","pub-client.pem")
+    #recuperer_cle_publique_certificat("certificat-produit.pem","pub-client.pem")
 
 #endef
 
 
-def generer_certificat_autorite(cle_privee):
+def generer_certificat_autorite():
 
+    # Generate our key
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
 
-    # création de la paire de  clés RSA 2048
-    cmd="openssl genrsa 2048 > "+cle_privee
-    try:
-        os.system(cmd)
-    except Exception as e:
-        print(e.message)
+    )
 
-    print("info: paire de clé ok")
-    
-    #extraction de la clé publique
-    cmd="openssl rsa -in "+cle_privee+" -pubout -out pub.pem"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-    print("info: clé publique extraite")
+    # Write our key to disk for safe keeping
+    with open("key.pem", "wb") as f:
+     f.write(key.private_bytes(
+         encoding=serialization.Encoding.PEM,
+         format=serialization.PrivateFormat.TraditionalOpenSSL,
+         encryption_algorithm=serialization.NoEncryption(),
+    ))
 
-    # création du fichier Certificate Signing Request (CSR) avec la clé privée
-    cmd="openssl req -new -key "+cle_privee+" -out csr-autorite.pem -batch"
+    print("info: génération clés OK")
 
-    try:
-        os.system(cmd)
-    except Exception as e:
-        print(e.message)
+    # Various details about who we are. For a self-signed certificate the
+    # subject and issuer are always the same.
+    subject = issuer = x509.Name([
+    # Provide various details about who we are.
+    x509.NameAttribute(NameOID.COUNTRY_NAME, u"FR"),
+    x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"France"),
+    x509.NameAttribute(NameOID.LOCALITY_NAME, u"Reims"),
+    x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Alexis et Marc"),
+    x509.NameAttribute(NameOID.COMMON_NAME, u"alexis-marc.fr"),
+    ])
+    cert = x509.CertificateBuilder().subject_name(
+        subject
+    ).issuer_name(
+        issuer
+    ).public_key(
+        key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        datetime.datetime.utcnow()
+    ).not_valid_after(
+        # Our certificate will be valid for 365 days
+        datetime.datetime.utcnow() + datetime.timedelta(days=365)
+    ).add_extension(
+        x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
+        critical=False,
+    # Sign our certificate with our private key
+    ).sign(key, hashes.SHA256())
+    # Write our certificate out to disk.
+    with open("certificat-ac.pem", "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
 
-    print("info: fichier CSR créé")
+    print("info: certicat autosigné généré ")
 
-    # signature du certificat
-    cmd="openssl x509 -req -days 365 -in csr-autorite.pem -signkey "+cle_privee+" -out public-autorite.crt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        print(e.message)
-    print("info: certificat X509 créé")
-
-
-    # supppression du csr
-    cmd="rm csr-autorite.pem"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        print(e.message)
 #endef
 
 if __name__ == '__main__' :
 
-    generer_certificat_autorite("keypair.pem")
+    generer_certificat_autorite()
 
     #attente d'une clé publique d'un véhicule ou de la station
     client = mqtt.Client()
