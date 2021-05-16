@@ -171,7 +171,6 @@ def on_cam(client, userdata, msg):
     print("info: body du certificat récupéré")
 
     # calcul du hash du body
-    
     cmd="openssl dgst -sha256 cert_body.bin | awk {'print $2'}"
     try:
         var2=subprocess.check_output(cmd, shell = True)
@@ -192,13 +191,43 @@ def on_cam(client, userdata, msg):
     # comparaison des 2 hash
     if hash_calcule == hash_certificat :
         print("info: le certificatx509 reçu a bien été signé par l'AC")
-        print("info: la clé publique de la station (comprise dans le certificatx509) a été certifié ")
+        print("info: la clé publique du véhicule (comprise dans le certificatx509) a été certifié ")
+
+
+        # Suppression des fichiers tmp
+        cmd="rm cert_body.bin signature-certif-recu.bin signature-certif-recu-decrypt.bin "
+        try:
+            os.system(cmd)
+        except Exception as e:
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+
+
+
+
+        ### Comme l'authenticité de la clé publique contenue dans le certificat reçu est avérée on passe à l'étape b)
+
+
+        # récupérer la clé publique du certificat reçu
+        cmd="openssl x509 -pubkey -out cle-publique-certif-recu.pem -in certif-recu.pem"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+
+
+        # calculer le hash de data (data est en clair)
+
+
+        # comparer les 2 hash
+
     else:
         print("info: le certificatx509 reçu n'a pas été signé par l'AC")
     #endif
 
 
-    
+   
 
 #endef
 def on_denm(client, userdata, msg):
