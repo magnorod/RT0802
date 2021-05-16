@@ -117,142 +117,92 @@ def on_cam(client, userdata, msg):
     cert = x509.load_pem_x509_certificate(certif_bytes)
     print("info: chargement du certificat x509 recu")
 
-
-    #lecture binaire de la clé publique de l'AC
-    f = open('cle_publique_ac.pem', "rb")
-    cle_public_ac=f.read()
-    f.close()
-    
-
-
-    cle_public_ac.verify(
-     signature_certif_recu,
-     message,
-     padding.PSS(
-         mgf=padding.MGF1(hashes.SHA256()),
-         salt_length=padding.PSS.MAX_LENGTH
-     ),
-     hashes.SHA256()
-     )
-
-
-
-
-    ####### a) Vérifier le certificat de la station
-    ##### Partie 1
-
-    # # récupération de la clé publique du certif recu
-    # cmd="openssl x509 -pubkey -out cle_publique_certif_recu.pem -in certif-recu.pem"
-    # try:
-    #     os.system(cmd)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: récupération de la clé publique du certif reçu")
+    ####### a) Vérifier le hash de la signature du certificatx509 reçu 
 
     # # extract hex of signature
-    # cmd="openssl x509 -in cle_publique_certif_recu.pem -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame | grep -v 'Signature Algorithm' | tr -d '[:space:]:'"
-    # try:
-    #     var=subprocess.check_output(cmd, shell = True)
-    #     var=var.decode()
-    #     hex_signature=str(var)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: extract hex of signature")
-    # print(hex_signature)
-    # # create signature dump
-    # cmd="echo "+hex_signature+" | xxd -r -p > certif_recu_sig.bin"
-    # print("\n")
-    # print(cmd)
-    # try:
-    #     os.system(cmd)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: create signature dump")
+    cmd="openssl x509 -in certif-recu.pem -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame | grep -v 'Signature Algorithm' | tr -d '[:space:]:'"
+    try:
+        var=subprocess.check_output(cmd, shell = True)
+        var=var.decode()
+        hex_signature=str(var)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: extract hex of signature")
+    print(hex_signature)
+    # create signature dump
+    cmd="echo \""+hex_signature+"\" | xxd -r -p > signature-certif-recu.bin"
+    print("\n")
+    print(cmd)
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: create signature dump")
 
-    # # Déchiffrer la signature du certificat recu avec la clé publique de l'AC
-    # cmd="openssl rsautl -verify -inkey cle_publique_ac.pem -in certif_recu_sig.bin -pubin > certif_recu_sig_decrypted.bin"
-    # try:
-    #     var=subprocess.check_output(cmd, shell = True)
-    #     var=var.decode()
-    #     decrypt_signature=str(var)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: decrypt signature")
+    # Déchiffrer la signature du certificat recu avec la clé publique de l'AC
+    cmd="openssl rsautl -verify -inkey cle_publique_ac.pem -in signature-certif-recu.bin -pubin > signature-certif-recu-decrypt.bin"
+    try:
+        var=subprocess.check_output(cmd, shell = True)
+        var=var.decode()
+        decrypt_signature=str(var)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: decrypt signature")
 
-    # cmd="openssl asn1parse -inform der -in certif_recu_sig_decrypted.bin | awk '{ print $9 }' | cut -d':' -f2"
-    # try:
-    #     var=subprocess.check_output(cmd, shell = True)
-    #     var=var.decode()
-    #     var=str(var)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: hash du certificat")
-    # print(var)
+    cmd="openssl asn1parse -inform der -in signature-certif-recu-decrypt.bin | grep HEX | awk '{print $9}' | cut -d':' -f2"
+    try:
+        var1=subprocess.check_output(cmd, shell = True)
+        var1=var1.decode()
+        var1=str(var1)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+   
     
-    # ##### Partie2
+    ##### Calculer le hash 
 
-    # # récupération du body du certificat
-    # cmd="openssl asn1parse -in cle_publique_certif_recu.pem -strparse 4 -out cert_body.bin -noout"
-    # try:
-    #     os.system(cmd)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: body du certificat récupéré")
+    # récupération du body du certificat
+    cmd="openssl asn1parse -in certif-recu.pem -strparse 4 -out cert_body.bin -noout"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: body du certificat récupéré")
 
-    # # calcul du hash du body
+    # calcul du hash du body
     
-    # cmd="openssl dgst -sha256 cert_body.bin"
-    # try:
-    #     var=subprocess.check_output(cmd, shell = True)
-    #     var=var.decode()
-    #     var=str(var)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: hash calculé")
-    # print(var)
+    cmd="openssl dgst -sha256 cert_body.bin | awk {'print $2'}"
+    try:
+        var2=subprocess.check_output(cmd, shell = True)
+        var2=var2.decode()
+        var2=str(var2)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
 
-    # #dechiffrer le condensat du certificat recu avec la clé publique de l'AC
-    # cmd="openssl rsautl -verify -in certif-recu.pem -pubin cle_publique_ac.pem -out dedigest.txt"
-    # var=subprocess.check_output(cmd, shell = True)
-    # var=var.decode()
-    # var=str(var)
+ 
 
-    # # openssl rsautl -decrypt -in certif-recu.pem -pubin cle_publique_ac.pem -out dedigest.txt
-    # # openssl x509 -in certif-recu.pem -text -noout -certopt
-    # # openssl x509 -in certif-recu.pem  -text -noout -certopt ca_default -certopt no_validity -certopt no_serial -certopt no_subject -certopt no_extensions -certopt no_signame
+    # majuscule du hash calculé car les lettres sont en minuscules pour que ça match avec le hash du certificat-recu
+    var2=var2.upper()
 
 
-    # # récupération de la clé publique du certificat reçu
-    # cmd="openssl x509 -pubkey -noout -in certif-recu.pem"
-    # try:
-    #     var=subprocess.check_output(cmd, shell = True)
-    #     var=var.decode()
-    #     var2=str(var)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
+    print("info: hash du certificat")
+    print(var1)
+    print("info: hash calculé")
+    print(var2)
 
-    # print("info: cle publique certif recu:")
-    # print(var2)
 
-    # # Comparaison des deux modulus
-    # if var1 == var2 :
-    #     print("info: le certificat recu a bien été signé par l'AC")
-    # else:
-    #     print("info: le certificat n'a pas été signé par l'AC")
-    # #endif
+    # comparaison des 2 hash
 
-    #Vérifier que l’empreinte signée a bien été signée avec le certificat envoyé
-
-    # La passerelle déchiffre la signature reçu en utilisant la clé publique de la station qui est contenue dans le certificat reçu
+    if var1 == var2 :
+        print("info: le certificatx509 reçu a bien été signé par l'AC")
+    else:
+        print("info: le certificatx509 reçu n'a pas été signé par l'AC")
 
 #endef
 def on_denm(client, userdata, msg):
