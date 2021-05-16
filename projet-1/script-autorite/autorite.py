@@ -7,6 +7,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+
+
+
 class Thread (threading.Thread):
 
     def __init__(self, csr, ip_demandeur_certificat):
@@ -47,16 +50,7 @@ def envoyer_certificat(ip_desti,topic,certificat):
     certificat=f.read()
     f.close()
 
-
-    # with open("key.pem", "rb") as key_file:
-    #  cle_publique_ac = serialization.load_pem_public_key(
-    #      key_file.read(),
-    #      password=None,
-    #  )
-    
-    # serialization.load_pem_public_key()
-
-      #extraction de la clé publique
+    #extraction de la clé publique
     cmd="openssl rsa -in key.pem -pubout -out pub.pem"
     try:
         os.system(cmd)
@@ -69,8 +63,6 @@ def envoyer_certificat(ip_desti,topic,certificat):
     f = open('pub.pem', "r")
     cle_publique_ac=f.read()
     f.close()
-
-
 
     # regroupement de l'ensemble des dictionnaires
     dictionnaire={"certificatX509":certificat,"cle_publique_ac":cle_publique_ac}
@@ -91,22 +83,12 @@ def on_message(client, userdata, msg):
     pass
 #endef
 
-def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
-    cmd="openssl x509 -pubkey -noout -in "+certificatx509+" > "+cle_pub_certificat
-    #print(cmd)
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-#endef
-
 def on_config(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
     csr_json=str(donnees["csr"] )
     ip_demandeur_certificat=str(donnees["ip_demandeur_certificat"] )
 
-     # à la réception d'une csr lancement d'un thread pour s'occuper de la génération du certificat X509
+    # à la réception d'une csr lancement d'un thread pour s'occuper de la génération du certificat X509
     m = Thread(csr_json,ip_demandeur_certificat)
     m.start()
 
@@ -121,9 +103,6 @@ def signer_certificat():
     except Exception as e:
         print(e.message)
     print("thread: certificat X509 signé par l'autorité")
-
-    #recuperer_cle_publique_certificat("certificat-produit.pem","pub-client.pem")
-
 #endef
 
 

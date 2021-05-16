@@ -61,6 +61,7 @@ def on_cam(client, userdata, msg):
     data=donnees["data"]
     certificat=donnees["certificat_station"]
     signature_base64=donnees["signature_base64"]
+    cle_publique_station=donnees["cle_publique_station"]
 
     # print("info: data  recu:")
     # print(data)
@@ -70,7 +71,7 @@ def on_cam(client, userdata, msg):
 
 
     # écriture de data 
-    f = open('data_recu.txt', "w")
+    f = open('data-recu.txt', "w")
     f.write(str(data))
     f.close()
     print("info: écriture de data dans un fichier tmp")
@@ -81,24 +82,26 @@ def on_cam(client, userdata, msg):
     f.close()
     print("info: écriture du certificat dans un fichier tmp")
 
+    # écriture de cle_publique_station
+    f = open('cle-publique-station.pem', "w")
+    f.write(cle_publique_station)
+    f.close()
 
-    # print("info: signature base64 recu:")
-    # print(signature_base64)
+
+    print("info: signature base64 recu:")
+    print(signature_base64)
 
     base64_bytes = signature_base64.encode("ascii")
     signature_binaire = base64.b64decode(base64_bytes)
     print("info: signature base64 binaire  décodée")
 
 
-    # print("info: signature bianaire:")
-    # print(signature_binaire)
-
     # écriture binaire de la signature
-    f = open('signature_recu.sig', "wb")
+    f = open('signature-recu.sig', "wb")
     f.write(signature_binaire)
     f.close()
 
-    print("info: écriture de la signature binaire dans le fichier signature_recu.sig ")
+    print("info: écriture de la signature binaire dans le fichier signature-recu.sig ")
 
     # lecture du  certificatx509 recu
 
@@ -141,7 +144,7 @@ def on_cam(client, userdata, msg):
     print("info: create signature dump")
 
     # Déchiffrer la signature du certificat recu avec la clé publique de l'AC
-    cmd="openssl rsautl -verify -inkey cle_publique_ac.pem -in signature-certif-recu.bin -pubin > signature-certif-recu-decrypt.bin"
+    cmd="openssl rsautl -verify -inkey cle-publique-ac.pem -in signature-certif-recu.bin -pubin > signature-certif-recu-decrypt.bin"
     try:
         var=subprocess.check_output(cmd, shell = True)
         var=var.decode()
@@ -193,7 +196,6 @@ def on_cam(client, userdata, msg):
         print("info: le certificatx509 reçu a bien été signé par l'AC")
         print("info: la clé publique du véhicule (comprise dans le certificatx509) a été certifié ")
 
-
         # Suppression des fichiers tmp
         cmd="rm cert_body.bin signature-certif-recu.bin signature-certif-recu-decrypt.bin "
         try:
@@ -202,32 +204,32 @@ def on_cam(client, userdata, msg):
             sys.stderr.write(e.message+"\n")
             exit(1)
 
-
-
-
         ### Comme l'authenticité de la clé publique contenue dans le certificat reçu est avérée on passe à l'étape b)
 
+        #Hex signatures cannot be verified using openssl. Instead, use "xxd -r" or similar program to transform the hex signature into a binary signature prior to verification.
+        
 
-        # récupérer la clé publique du certificat reçu
-        cmd="openssl x509 -pubkey -out cle-publique-certif-recu.pem -in certif-recu.pem"
+        #lecture binaire du certificat-recu
+        f = open('signature-recu.sig', "rb")
+        var=f.read()
+        f.close()
+
+        f = open('signature-recu.bin', "wb")
+        f.write(var)
+        f.close()
+
+        # verif
+        print("info: vérification de la signature du hash de data") 
+        cmd="openssl dgst -sha1 -verify cle-publique-station.pem -signature signature-recu.bin data-recu.txt"
         try:
             os.system(cmd)
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)
 
-
-        # calculer le hash de data (data est en clair)
-
-
-        # comparer les 2 hash
-
     else:
         print("info: le certificatx509 reçu n'a pas été signé par l'AC")
     #endif
-
-
-   
 
 #endef
 def on_denm(client, userdata, msg):
@@ -356,14 +358,11 @@ def generer_csr():
 
 
 def generer_json_csr():
-    cmd="cat csr.pem"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        var=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
+
+    #lecture binaire du certificat-recu
+    f = open('csr.pem', "r")
+    var=f.read()
+    f.close()
 
     # récupération de l'ip de l'acteur demandant un certificat
     cmd="ip addr show | grep enp0s3 | grep inet | awk '{print $2}'"
@@ -378,8 +377,17 @@ def generer_json_csr():
     # création d'un dictionnaire
     dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
 
-    #conversion du dictionnaire en json
+    # conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
+
+    # suppression du fichier csr
+    cmd="rm csr.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: fichier csr.pem supprimé")
 
     return json_data
     
@@ -420,7 +428,7 @@ def on_config(client, userdata, msg):
     print("info: le certificatX509 de la station a été récupéré ")
 
     # écriture de la clé publique de l'AC
-    f = open('cle_publique_ac.pem', "w")
+    f = open('cle-publique-ac.pem', "w")
     f.write(str(cle_publique_ac))
     f.close()
     print("info: la clé publique de l'AC a été récupérée")

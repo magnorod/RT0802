@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import json, os, subprocess, threading, sys, datetime, time, random,base64
+import cryptography
 import paho.mqtt.client as mqtt
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -25,6 +26,14 @@ def generer_csr():
          format=serialization.PrivateFormat.TraditionalOpenSSL,
          encryption_algorithm=serialization.NoEncryption(),
     ))
+
+    cmd="openssl rsa -in key.pem -pubout -out pub.pem"   
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: clé publique extraite")
 
     print("info: génération clés OK")
 
@@ -55,14 +64,11 @@ def generer_csr():
 #endef
 
 def generer_json_csr():
-    cmd="cat csr.pem"
-    try:
-        var=subprocess.check_output(cmd, shell = True)
-        var=var.decode()
-        var=str(var)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
+
+    #lecture binaire du certificat-recu
+    f = open('csr.pem', "r")
+    var=f.read()
+    f.close()
 
     # récupération de l'ip de l'acteur demandant un certificat
     cmd="ip addr show | grep enp0s3 | grep inet | awk '{print $2}'"
@@ -77,11 +83,20 @@ def generer_json_csr():
     # création d'un dictionnaire
     dictionnaire = {"csr": var, "ip_demandeur_certificat":var2}
 
-    #conversion du dictionnaire en json
+    # conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
 
-    return json_data
+    # suppression du fichier csr
+    cmd="rm csr.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: fichier csr.pem supprimé")
 
+    return json_data
+    
 #endef
 
 def envoyer_csr(csr,ip_server_mqtt):
@@ -232,7 +247,7 @@ def on_config(client, userdata, msg):
     print("info: clé publique de l'autorité reçu")
     #print(cle_publique_ac)
 
-    f = open('certificatx509.crt', "w")
+    f = open('certificatx509.pem', "w")
     f.write(str(certificat))
     f.close()
     print("info: le certificatX509 de la station a été récupéré ")
@@ -282,6 +297,7 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     # transformation du dictionnaire en json
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
+
     # hachage sha1 puis signature du json
     signer_hash_sha1_message(json_dictionnaire_data)
 
@@ -302,11 +318,17 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     print(signature_base64_string)
     
     # récupération du certificat
-    f= open("certificatx509.crt", "r")
+    f= open("certificatx509.pem", "r")
     certificat_station=f.read()
     f.close()
 
-    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64_string,"certificat_station":certificat_station}
+
+    # récupération clé publique station
+    f= open("pub.pem", "r")
+    cle_publique_station=f.read()
+    f.close()
+
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64_string,"certificat_station":certificat_station,"cle_publique_station":cle_publique_station}
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
@@ -330,10 +352,22 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
         exit(1)
     print("info: message envoyé")
 
+
+    # # suppression du fichier hash.sig
+    # cmd="rm hash.sig"
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: fichier hash.sig supprimé")
+
+
 #endef
 
 def signer_hash_sha1_message(message):
 
+    # écriture de data (JSON)
     f = open('message.txt', "w")
     f.write(str(message))
     f.close()
@@ -345,6 +379,16 @@ def signer_hash_sha1_message(message):
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
+
+    #suppresion du fichier tmp
+    # cmd="rm message.txt"
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     sys.stderr.write(e.message+"\n")
+    #     exit(1)
+    # print("info: fichier message.txt supprimé")
+
 #endef 
 
 if __name__ == '__main__' :
@@ -353,7 +397,7 @@ if __name__ == '__main__' :
     ip_autorite="192.168.3.35"
     ip_passerelle="192.168.3.36"
     cle_pub_certificat="pubx509.pem"
-    certificat="certificatx509.crt"
+    certificat="certificatx509.pem"
     
     #generer_cles_rsa(fichier_paire_de_cles)
     generer_csr()
