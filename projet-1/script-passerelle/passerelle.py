@@ -133,7 +133,6 @@ def on_cam(client, userdata, msg):
     # create signature dump
     cmd="echo \""+hex_signature+"\" | xxd -r -p > signature-certif-recu.bin"
     print("\n")
-    print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
@@ -156,14 +155,12 @@ def on_cam(client, userdata, msg):
     try:
         var1=subprocess.check_output(cmd, shell = True)
         var1=var1.decode()
-        var1=str(var1)
+        hash_certificat=str(var1)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
    
-    
     ##### Calculer le hash 
-
     # récupération du body du certificat
     cmd="openssl asn1parse -in certif-recu.pem -strparse 4 -out cert_body.bin -noout"
     try:
@@ -179,30 +176,29 @@ def on_cam(client, userdata, msg):
     try:
         var2=subprocess.check_output(cmd, shell = True)
         var2=var2.decode()
-        var2=str(var2)
+        hash_calcule=str(var2)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
 
-
- 
-
     # majuscule du hash calculé car les lettres sont en minuscules pour que ça match avec le hash du certificat-recu
-    var2=var2.upper()
-
+    hash_calcule=hash_calcule.upper()
 
     print("info: hash du certificat")
-    print(var1)
+    print(hash_certificat)
     print("info: hash calculé")
-    print(var2)
-
+    print(hash_calcule)
 
     # comparaison des 2 hash
-
-    if var1 == var2 :
+    if hash_calcule == hash_certificat :
         print("info: le certificatx509 reçu a bien été signé par l'AC")
+        print("info: la clé publique de la station (comprise dans le certificatx509) a été certifié ")
     else:
         print("info: le certificatx509 reçu n'a pas été signé par l'AC")
+    #endif
+
+
+    
 
 #endef
 def on_denm(client, userdata, msg):
