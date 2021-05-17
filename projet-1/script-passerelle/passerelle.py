@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import json, os, subprocess, threading, sys, datetime, time, random,base64
+import json, os, subprocess, threading, sys, datetime, time, random, base64
 import paho.mqtt.client as mqtt
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -102,25 +102,22 @@ def on_cam(client, userdata, msg):
         exit(1)
 
 
-    # écriture de la signature encodée en base64
-    f = open('signature-recu-b64.txt', "w")
-    f.write(signature_base64)
-    f.close()
-
-    print("info: sinature_base64")
+    print("info: signature base64 recu:")
     print(signature_base64)
 
-    cmd="openssl base64 -d -in signature-recu-b64.txt -out signature-recu.bin"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
 
+    base64_bytes = signature_base64.encode("ascii")
+    signature_binaire = base64.b64decode(base64_bytes)
+    print("info: signature base64 binaire  décodée")
+
+
+    #écriture de la signature binaire
+    f = open('signature-recu.bin', "wb")
+    f.write(signature_binaire)
+    f.close()
 
 
     # lecture du  certificatx509 recu
-
     print("certificat_recu:")
     print(certificat)
 
@@ -221,15 +218,23 @@ def on_cam(client, userdata, msg):
             exit(1)
 
         ### Comme l'authenticité de la clé publique contenue dans le certificat reçu est avérée on passe à l'étape b)
-
-        #Hex signatures cannot be verified using openssl. Instead, use "xxd -r" or similar program to transform the hex signature into a binary signature prior to verification.
-        
-
         # verif
-        print("info: vérification de la signature du hash de data") 
+        print("info: vérification de la signature du hash de data")
+        
         cmd="openssl dgst -sha1 -verify cle-publique-certif-recu.pem -signature signature-recu.bin data-recu.txt"
         try:
-            os.system(cmd)
+            var=subprocess.check_output(cmd, shell = True)
+        except subprocess.CalledProcessError as err:
+            print('ERROR:', err)
+            exit(1)
+        try:
+            var=var.decode()
+        except Exception as e:
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+        try:
+            var=str(var)
+            print("info: la station a bien utilisé sa clé privée pour signer le message. On est sûr que le message vient de la station correspondante à la clé publique contenue dans le certificat")
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)

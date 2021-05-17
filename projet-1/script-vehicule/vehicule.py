@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import json, os, subprocess, threading, sys, datetime, time, random
+import json, os, subprocess, threading, sys, datetime, time, random, base64
 import cryptography
 import paho.mqtt.client as mqtt
 from cryptography import x509
@@ -294,23 +294,16 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     # transformation du dictionnaire en json
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
-
     # hachage sha1 puis signature du json
     signer_hash_sha1_message(json_dictionnaire_data)
 
-
-    # encodage de la signature binaire en base64 (nécessaire pour le transport)
-    cmd="openssl base64 -in hash.bin -out hash-b64.txt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-
-    # lecture de la signature encodée en base64
-    f= open("hash-b64.txt", "r")
-    signature_base64=f.read()
+    f = open('signature.bin', "rb")
+    signature_binaire=f.read()
     f.close()
+
+    #encodage base64 de la signature binaire
+    signature_base64_bytes=base64.b64encode(signature_binaire)
+    signature_base64= signature_base64_bytes.decode("ascii")
 
     print("info: signature base64")
     print(signature_base64)
@@ -346,28 +339,16 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     print("info: message envoyé")
 
 
-    # # suppression du fichier hash.bin
-    # cmd="rm hash.bin"
-    # try:
-    #     os.system(cmd)
-    # except Exception as e:
-    #     sys.stderr.write(e.message+"\n")
-    #     exit(1)
-    # print("info: fichier hash.bin supprimé")
+    # suppression du fichier signature.bin
+    cmd="rm signature.bin"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: fichier signature.bin supprimé")
 
 #endef
-
-
-# def verif_signature():
-#   #  COMMANDE FONCTIONNE
-#     print("info: TEST VERIF ETAPE1") 
-#     cmd="openssl dgst -sha1 -verify pub.pem -signature hash.bin message.txt"
-#     try:
-#         os.system(cmd)
-#     except Exception as e:
-#         sys.stderr.write(e.message+"\n")
-#         exit(1)
-# #endef
 
 def signer_hash_sha1_message(message):
 
@@ -377,7 +358,7 @@ def signer_hash_sha1_message(message):
     f.close()
 
     #signature avec la clé privée du véhicule
-    cmd="openssl dgst -sha1 -sign key.pem -keyform PEM -out hash.bin message.txt"
+    cmd="openssl dgst -sha1 -sign key.pem -keyform PEM -out signature.bin message.txt"
     try:
         os.system(cmd)
     except Exception as e:
