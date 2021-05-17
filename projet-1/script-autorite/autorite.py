@@ -25,7 +25,7 @@ class Thread (threading.Thread):
         # print("thread : ip_demandeur_certificat\n"+str(self.ip_demandeur_certificat))
         
         # créer un fichier temporaire contenant la clé publique recu
-        f = open('csr-recu.pem', "w")
+        f = open('csr-recu.csr', "w")
         f.write(str(self.csr))
         f.close()
         
@@ -95,13 +95,20 @@ def on_config(client, userdata, msg):
 #endef
 
 def signer_certificat():
-    # signature du certificat
-    cmd="openssl x509 -req -days 365 -in csr-recu.pem -signkey key.pem -out certificat-produit.pem"
+    # signature du certificat ne vas pas car autosigné (mauvaise clé ppublique )
+    # cmd="openssl x509 -req -days 365 -in csr-recu.csr -signkey key.pem -out certificat-produit.pem"
+    # #print(cmd)
+    # try:
+    #     os.system(cmd)
+    # except Exception as e:
+    #     print(e.message)
+    cmd="openssl x509 -req -days 365 -in csr-recu.csr -CA certificat-ac.pem -CAkey key.pem -CAcreateserial -out certificat-produit.pem"
     #print(cmd)
     try:
         os.system(cmd)
     except Exception as e:
         print(e.message)
+
     print("thread: certificat X509 signé par l'autorité")
 #endef
 

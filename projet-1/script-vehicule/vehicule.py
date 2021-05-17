@@ -57,7 +57,7 @@ def generer_csr():
     ).sign(key, hashes.SHA256())
 
     # Write our CSR out to disk.
-    with open("csr.pem", "wb") as f:
+    with open("crt.csr", "wb") as f:
         f.write(csr.public_bytes(serialization.Encoding.PEM))
     
     print("info: CSR généré")
@@ -66,7 +66,7 @@ def generer_csr():
 def generer_json_csr():
 
     #lecture binaire du certificat-recu
-    f = open('csr.pem', "r")
+    f = open('crt.csr', "r")
     var=f.read()
     f.close()
 
@@ -87,13 +87,13 @@ def generer_json_csr():
     json_data=json.dumps(dictionnaire)
 
     # suppression du fichier csr
-    cmd="rm csr.pem"
+    cmd="rm crt.csr"
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
-    print("info: fichier csr.pem supprimé")
+    print("info: fichier crt.csr supprimé")
 
     return json_data
     
@@ -314,19 +314,14 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
 
     print("info: signature base64")
     print(signature_base64)
-    
+
     # récupération du certificat
     f= open("certificatx509.pem", "r")
     certificat_station=f.read()
     f.close()
 
 
-    # récupération clé publique station
-    f= open("pub.pem", "r")
-    cle_publique_station=f.read()
-    f.close()
-
-    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station,"cle_publique_station":cle_publique_station}
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station}
 
 
     #conversion du dictionnaire en json
@@ -363,17 +358,16 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
 #endef
 
 
-def verif_signature():
-  #  COMMANDE FONCTIONNE
-    print("info: TEST VERIF ETAPE1") 
-    cmd="openssl dgst -sha1 -verify pub.pem -signature hash.bin message.txt"
-    try:
-        os.system(cmd)
-    except Exception as e:
-        sys.stderr.write(e.message+"\n")
-        exit(1)
-
-#endef
+# def verif_signature():
+#   #  COMMANDE FONCTIONNE
+#     print("info: TEST VERIF ETAPE1") 
+#     cmd="openssl dgst -sha1 -verify pub.pem -signature hash.bin message.txt"
+#     try:
+#         os.system(cmd)
+#     except Exception as e:
+#         sys.stderr.write(e.message+"\n")
+#         exit(1)
+# #endef
 
 def signer_hash_sha1_message(message):
 
@@ -472,7 +466,6 @@ if __name__ == '__main__' :
             print("info: scénario authentification")
             
             scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle)
-            verif_signature()
             exit(1)
             
 

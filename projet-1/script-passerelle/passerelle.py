@@ -61,8 +61,6 @@ def on_cam(client, userdata, msg):
     data=donnees["data"]
     certificat=donnees["certificat_station"]
     signature_base64=donnees["signature_base64"]
-    cle_publique_station=donnees["cle_publique_station"]
-
     # print("info: data  recu:")
     # print(data)
 
@@ -94,10 +92,15 @@ def on_cam(client, userdata, msg):
     f.close()
     print("info: écriture du certificat dans un fichier tmp")
 
-    # écriture de cle_publique_station
-    f = open('cle-publique-station.pem', "w")
-    f.write(cle_publique_station)
-    f.close()
+
+    #extraire clé publique du certif-recu
+    cmd="openssl x509 -in certif-recu.pem -pubkey -out cle-publique-certif-recu.pem"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
 
     # écriture de la signature encodée en base64
     f = open('signature-recu-b64.txt', "w")
@@ -224,13 +227,12 @@ def on_cam(client, userdata, msg):
 
         # verif
         print("info: vérification de la signature du hash de data") 
-        cmd="openssl dgst -sha1 -verify cle-publique-station.pem -signature signature-recu.bin data-recu.txt"
+        cmd="openssl dgst -sha1 -verify cle-publique-certif-recu.pem -signature signature-recu.bin data-recu.txt"
         try:
             os.system(cmd)
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)
-
     else:
         print("info: le certificatx509 reçu n'a pas été signé par l'AC")
     #endif
@@ -354,7 +356,7 @@ def generer_csr():
     ).sign(key, hashes.SHA256())
 
     # Write our CSR out to disk.
-    with open("csr.pem", "wb") as f:
+    with open("crt.csr", "wb") as f:
         f.write(csr.public_bytes(serialization.Encoding.PEM))
     
     print("info: CSR généré")
@@ -364,7 +366,7 @@ def generer_csr():
 def generer_json_csr():
 
     #lecture binaire du certificat-recu
-    f = open('csr.pem', "r")
+    f = open('crt.csr', "r")
     var=f.read()
     f.close()
 
@@ -385,13 +387,13 @@ def generer_json_csr():
     json_data=json.dumps(dictionnaire)
 
     # suppression du fichier csr
-    cmd="rm csr.pem"
+    cmd="rm crt.csr"
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
-    print("info: fichier csr.pem supprimé")
+    print("info: fichier crt.csr supprimé")
 
     return json_data
     
