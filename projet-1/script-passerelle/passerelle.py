@@ -69,10 +69,22 @@ def on_cam(client, userdata, msg):
     # print("info: certificat recu:")
     # print(certificat)
 
+    print("data:")
+    print(data)
+
+    data=str(data)
+    print("dat(str):")
+    print(data)
+
+    #remplacement des simples quotes par des doubles quotes (cela pose problème au niveau de la vérif de la signature sinon)
+    data=data.replace('\'', '\"')
+
+    print("data après modif:")
+    print(data)
 
     # écriture de data 
     f = open('data-recu.txt', "w")
-    f.write(str(data))
+    f.write(data)
     f.close()
     print("info: écriture de data dans un fichier tmp")
     
@@ -87,21 +99,22 @@ def on_cam(client, userdata, msg):
     f.write(cle_publique_station)
     f.close()
 
-
-    print("info: signature base64 recu:")
-    print(signature_base64)
-
-    base64_bytes = signature_base64.encode("ascii")
-    signature_binaire = base64.b64decode(base64_bytes)
-    print("info: signature base64 binaire  décodée")
-
-
-    # écriture binaire de la signature
-    f = open('signature-recu.sig', "wb")
-    f.write(signature_binaire)
+    # écriture de la signature encodée en base64
+    f = open('signature-recu-b64.txt', "w")
+    f.write(signature_base64)
     f.close()
 
-    print("info: écriture de la signature binaire dans le fichier signature-recu.sig ")
+    print("info: sinature_base64")
+    print(signature_base64)
+
+    cmd="openssl base64 -d -in signature-recu-b64.txt -out signature-recu.bin"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+
 
     # lecture du  certificatx509 recu
 
@@ -208,15 +221,6 @@ def on_cam(client, userdata, msg):
 
         #Hex signatures cannot be verified using openssl. Instead, use "xxd -r" or similar program to transform the hex signature into a binary signature prior to verification.
         
-
-        #lecture binaire du certificat-recu
-        f = open('signature-recu.sig', "rb")
-        var=f.read()
-        f.close()
-
-        f = open('signature-recu.bin', "wb")
-        f.write(var)
-        f.close()
 
         # verif
         print("info: vérification de la signature du hash de data") 

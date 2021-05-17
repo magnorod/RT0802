@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import json, os, subprocess, threading, sys, datetime, time, random,base64
+import json, os, subprocess, threading, sys, datetime, time, random
 import cryptography
 import paho.mqtt.client as mqtt
 from cryptography import x509
@@ -291,9 +291,6 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     # construction du message CAM
     dictionnaire_data=gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp)
     
-    # print("dictionnaire_data:")
-    # print(dictionnaire_data)
-
     # transformation du dictionnaire en json
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
@@ -301,21 +298,22 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     # hachage sha1 puis signature du json
     signer_hash_sha1_message(json_dictionnaire_data)
 
-    # lecture binaire de la signature
-    f= open("hash.sig", "rb")
-    signature_binaire=f.read()
+
+    # encodage de la signature binaire en base64 (nécessaire pour le transport)
+    cmd="openssl base64 -in hash.bin -out hash-b64.txt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+
+    # lecture de la signature encodée en base64
+    f= open("hash-b64.txt", "r")
+    signature_base64=f.read()
     f.close()
 
-    #encodage base64 de la signature binaire
-    signature_base64_bytes=base64.b64encode(signature_binaire)
-    
-    print("info: signature_base64_bytes=")
-    print(signature_base64_bytes)
-
-    signature_base64_string = signature_base64_bytes.decode("ascii")
-
-    print("info: signature_base64_string=")
-    print(signature_base64_string)
+    print("info: signature base64")
+    print(signature_base64)
     
     # récupération du certificat
     f= open("certificatx509.pem", "r")
@@ -328,7 +326,8 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     cle_publique_station=f.read()
     f.close()
 
-    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64_string,"certificat_station":certificat_station,"cle_publique_station":cle_publique_station}
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station,"cle_publique_station":cle_publique_station}
+
 
     #conversion du dictionnaire en json
     json_data=json.dumps(dictionnaire)
@@ -344,7 +343,6 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
 
     cmd="mosquitto_pub -h "+str(ip_passerelle)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(json_data)+"'" 
     print(cmd)
-
     try:
         os.system(cmd)
     except Exception as e:
@@ -353,15 +351,27 @@ def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp
     print("info: message envoyé")
 
 
-    # # suppression du fichier hash.sig
-    # cmd="rm hash.sig"
+    # # suppression du fichier hash.bin
+    # cmd="rm hash.bin"
     # try:
     #     os.system(cmd)
     # except Exception as e:
     #     sys.stderr.write(e.message+"\n")
     #     exit(1)
-    # print("info: fichier hash.sig supprimé")
+    # print("info: fichier hash.bin supprimé")
 
+#endef
+
+
+def verif_signature():
+  #  COMMANDE FONCTIONNE
+    print("info: TEST VERIF ETAPE1") 
+    cmd="openssl dgst -sha1 -verify pub.pem -signature hash.bin message.txt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
 
 #endef
 
@@ -373,12 +383,13 @@ def signer_hash_sha1_message(message):
     f.close()
 
     #signature avec la clé privée du véhicule
-    cmd="openssl dgst -sha1 -sign key.pem -keyform PEM -out hash.sig message.txt"
+    cmd="openssl dgst -sha1 -sign key.pem -keyform PEM -out hash.bin message.txt"
     try:
         os.system(cmd)
     except Exception as e:
         sys.stderr.write(e.message+"\n")
         exit(1)
+
 
     #suppresion du fichier tmp
     # cmd="rm message.txt"
@@ -461,6 +472,7 @@ if __name__ == '__main__' :
             print("info: scénario authentification")
             
             scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle)
+            verif_signature()
             exit(1)
             
 
