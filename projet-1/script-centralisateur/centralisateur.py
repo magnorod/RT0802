@@ -1,44 +1,48 @@
 #!/usr/bin/python3
-import json, time, threading, os
+import json, time, threading, os, base64
 import paho.mqtt.client as mqtt
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 class Thread_DH (threading.Thread):
-    def __init__(self, donnees, ip_desti):
+    def __init__(self, donnees, ip_desti, topic):
         threading.Thread.__init__(self)
         self.donnees = donnees
         self.ip_desti = ip_desti
+        self.topic = topic
     #endef
 
     def run(self):
         
         print("##########EXECUTION D'UN THREAD##########")
 
-        print("thread(centralisateur): donnees="+str(self.donnees))
-        print("thread(centralisateur): ip_desti="+str(self.ip_desti))
+        print("thread(passerelle): donnees="+str(self.donnees))
+        print("thread(passerelle): ip_desti="+str(self.ip_desti))
 
-        
-        # création du dictionnaire
+        print("cle_publique_dh="+str(self.donnees))
+        # cle_publique_dh_b64_bytes=base64.b64encode(self.donnees)
+        # cle_publique_dh_b64=cle_publique_dh_b64_bytes.decode("ascii")
+
+
+         # création du dictionnaire
         dictionnaire = {"cle_publique_dh":self.donnees}
 
         #conversion du dictionnaire en json
-        donneesJson = json.dumps(self.donnees)
-        cmd="mosquitto_pub -h "+self.ip_desti+" -q 1 -u 1 -t dh/centralisateur -m '"+str(donneesJson)+"'"
+        donneesJson = json.dumps(dictionnaire)
+        cmd="mosquitto_pub -h "+self.ip_desti+" -q 1 -u 1 -t "+self.topic+" -m '"+str(donneesJson)+"'"
         try:
             os.system(cmd)
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)
 
-        print("thread(centralisateur): cmd="+str(cmd))
-        print("thread(centralisateur): clé publique Diffie Hellman envoyée à la passerelle")
+        print("thread(passerelle): cmd="+str(cmd))
+        print("thread(passerelle): clé publique Diffie Hellman envoyée à la passerelle")
 
     #endef
 
 #endclass
-
 
 def on_message(client, userdata, msg):
     pass
@@ -78,11 +82,16 @@ def on_dh(client, userdata, msg):
     private_key = parameters.generate_private_key()
 
 
-
     donnees = json.loads(msg.payload.decode("utf-8"))
     print("donnees:"+str(donnees))
     peer_public_key=str(donnees["peer_public_key"])
     print("centralisateur: Kp récupéré")
+
+    # envoyer la clé publique au centralisateur via un thread
+    print("passerelle: thread créé")
+    m = Thread_DH(private_key.public_key(),ip_desti,"dh/centralisateur")
+    print("passerelle: lancement du thread")
+    m.start()
 
 
     # secret_partagé
@@ -97,15 +106,6 @@ def on_dh(client, userdata, msg):
         ).derive(shared_key)
 
     print("centralisateur: K="+str(derived_key))
-
-    # envoyer la clé publique au centralisateur via un thread
-    print("passerelle: thread créé")
-    m = Thread_DH(private_key.public_key(),ip_desti)
-    print("passerelle: lancement du thread")
-    m.start()
-
-  
-
 #endef
 
 
@@ -121,5 +121,5 @@ if __name__ == "__main__":
 
     # Diffie Hellman avec la passerelle
     client.subscribe("dh/passerelle")
-
+    print("info: en attente de requête")
     client.loop_forever()

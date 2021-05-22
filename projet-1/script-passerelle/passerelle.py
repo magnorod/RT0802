@@ -37,13 +37,18 @@ class Thread_DH (threading.Thread):
     def run(self):
         
         print("##########EXECUTION D'UN THREAD##########")
-
         print("thread(passerelle): donnees="+str(self.donnees))
         print("thread(passerelle): ip_desti="+str(self.ip_desti))
 
         
+        #encodage en base 64 de la clé publique Diffie Hellman 
+
+        print("cle_publique_dh="+str(self.donnees))
+        cle_publique_dh_b64_bytes=base64.b64encode(self.donnees)
+        cle_publique_dh_b64=cle_publique_dh_b64_bytes.decode("ascii")
+
         # création du dictionnaire
-        dictionnaire = {"peer_public_key":self.donnees}
+        dictionnaire = {"cle_publique_dh":cle_publique_dh_b64}
 
         #conversion du dictionnaire en json
         donneesJson = json.dumps(dictionnaire)
@@ -56,7 +61,6 @@ class Thread_DH (threading.Thread):
 
         print("thread(passerelle): cmd="+str(cmd))
         print("thread(passerelle): clé publique Diffie Hellman envoyée au centralisateur")
-
     #endef
 
 #endclass
@@ -100,7 +104,8 @@ def on_dh(client, userdata, msg):
 
     # Generate a private key for use in the exchange.
     private_key = parameters.generate_private_key()
-    
+
+
 
     # envoyer la clé publique au centralisateur via un thread
     print("passerelle: thread créé")
@@ -114,7 +119,7 @@ def on_dh(client, userdata, msg):
     donnees = json.loads(msg.payload.decode("utf-8"))
     print("donnees:"+str(donnees))
     peer_public_key=str(donnees["peer_public_key"])
-   
+
 
     if peer_public_key != "start" : # la clé recu n'est pas la clé factice
         
@@ -130,7 +135,12 @@ def on_dh(client, userdata, msg):
             ).derive(shared_key)
 
         print("passerelle: K="+str(derived_key))
+    else:
+        print("passerelle: clé factice reçu")
     #endif
+   
+
+    
 
 #endef
 
@@ -548,7 +558,7 @@ def on_config(client, userdata, msg):
 
 if __name__ == "__main__":
 
-    ip_autorite="192.168.3.35"
+    ip_autorite="192.168.3.40"
 
     generer_csr()
     csr_json=generer_json_csr()
@@ -572,5 +582,10 @@ if __name__ == "__main__":
     client.subscribe("denm/moto")
     client.subscribe("denm/camion")
     client.subscribe("dh/centralisateur")
+
+    # déclenchement de l'échange Diffie Hellman avec la passerelle
+    time.sleep(2)
+    init_dh()
+    print("info: en attente de requête")
 
     client.loop_forever()
