@@ -286,6 +286,108 @@ def recuperer_cle_publique_certificat(certificatx509,cle_pub_certificat):
         exit(1)
 #endef
 
+
+def chiffrer_aes128(fichier,passphase):
+    cmd="openssl enc -e aes128 -pbkdf2 -k "+passphase+" -in "+fichier+" -out data-chiffre.txt"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+#endef
+
+
+def scenario2 (stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle):
+
+    ### DATA
+
+    # construction du message CAM
+    dictionnaire_data=gen_dictionnaire_cam(stationId,stationType,vitesse,heading,latitude,longitude,timestamp)
+
+       
+    # transformation du dictionnaire en json
+    json_dictionnaire_data=json.dumps(dictionnaire_data)
+
+
+
+
+
+    ### SIGNATURE
+
+    # hachage sha1 puis signature du json
+    signer_hash_sha1_message(json_dictionnaire_data)
+
+    f = open('signature.bin', "rb")
+    signature_binaire=f.read()
+    f.close()
+
+    #encodage base64 de la signature binaire
+    signature_base64_bytes=base64.b64encode(signature_binaire)
+    signature_base64= signature_base64_bytes.decode("ascii")
+
+    print("info: signature base64")
+    print(signature_base64)
+
+
+
+
+    ### Chiffrement de DATA
+
+    # l 
+
+
+    ### CERTIFICAT
+
+    # récupération du certificat
+    f= open("certificatx509.pem", "r")
+    certificat_station=f.read()
+    f.close()
+
+
+    dictionnaire={"data":dictionnaire_data,"signature_base64":signature_base64,"certificat_station":certificat_station}
+
+
+    #conversion du dictionnaire en json
+    json_data=json.dumps(dictionnaire)
+
+    # construction requête bash
+    topic=""
+    if stationId == 1:
+        topic="auto"
+    elif stationId == 2:
+        topic="moto"
+    else:
+        topic="camion"
+
+    cmd="mosquitto_pub -h "+str(ip_passerelle)+" -q 1 "+"-u "+str(stationId)+" -t cam/"+str(topic)+" -m '"+str(json_data)+"'" 
+    print(cmd)
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: message envoyé")
+
+
+    # suppression du fichier signature.bin
+    cmd="rm signature.bin"
+    try:
+        os.system(cmd)
+    except Exception as e:
+        sys.stderr.write(e.message+"\n")
+        exit(1)
+    print("info: fichier signature.bin supprimé")
+
+#endef
+
+    
+
+
+#endef
+
+
+
+
 def scenario1(stationId,stationType,vitesse,heading,latitude,longitude,timestamp,ip_passerelle):
     
     # construction du message CAM

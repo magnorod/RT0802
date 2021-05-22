@@ -6,26 +6,62 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-class MonThread (threading.Thread):
-    def __init__(self, donnees):
+# class MonThread (threading.Thread):
+#     def __init__(self, donnees):
+#         threading.Thread.__init__(self)
+#         self.donnees = donnees
+#     #endef
+
+#     def run(self):
+#         print("##########EXECUTION D'UN THREAD##########")
+#         print("THREAD:donnees="+str(self.donnees))
+#         #conversion du dictionnaire en json
+#         donneesJson = json.dumps(self.donnees)
+#         cmd1="mosquitto_pub -h 192.168.0.54 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
+#         os.system(cmd1)
+#         print("THREAD: cmd1="+str(cmd1))
+#         print("THREAD:denm envoyé au centralisateur")
+#     #endef
+
+class Thread_DH (threading.Thread):
+    def __init__(self, donnees, ip_desti, topic):
         threading.Thread.__init__(self)
         self.donnees = donnees
+        self.ip_desti = ip_desti
+        self.topic = topic
     #endef
 
     def run(self):
+        
         print("##########EXECUTION D'UN THREAD##########")
-        print("THREAD:donnees="+str(self.donnees))
+
+        print("thread(passerelle): donnees="+str(self.donnees))
+        print("thread(passerelle): ip_desti="+str(self.ip_desti))
+
+        
+        # création du dictionnaire
+        dictionnaire = {"peer_public_key":self.donnees}
+
         #conversion du dictionnaire en json
-        donneesJson = json.dumps(self.donnees)
-        cmd1="mosquitto_pub -h 192.168.0.54 -q 1 -u passerelle -t denm/passerelle -m '"+str(donneesJson)+"'"
-        os.system(cmd1)
-        print("THREAD: cmd1="+str(cmd1))
-        print("THREAD:denm envoyé au centralisateur")
+        donneesJson = json.dumps(dictionnaire)
+        cmd="mosquitto_pub -h "+self.ip_desti+" -q 1 -u 1 -t "+self.topic+" -m '"+str(donneesJson)+"'"
+        try:
+            os.system(cmd)
+        except Exception as e:
+            sys.stderr.write(e.message+"\n")
+            exit(1)
+
+        print("thread(passerelle): cmd="+str(cmd))
+        print("thread(passerelle): clé publique Diffie Hellman envoyée au centralisateur")
+
     #endef
 
-def recuperer_cle_publique(keypair,cle_pub):
+#endclass
 
+def recuperer_cle_publique(keypair,cle_pub):
     cmd="openssl rsa -in "+keypair+" -pubout -out "+cle_pub
     try:
         os.system(cmd)
@@ -50,6 +86,54 @@ def verifier_hash(hash_file,signature,certificatx509,cle_pub_certificat):
         sys.stderr.write(e.message+"\n")
         exit(1)
 #endef
+
+
+
+
+def on_dh(client, userdata, msg):
+
+    # print("passerelle: demande d'échange Diffie-Hellman du centralisateur reçu")
+    ip_desti="192.168.3.41"
+
+    # Generate some parameters. These can be reused.
+    parameters = dh.generate_parameters(generator=2, key_size=2048)
+
+    # Generate a private key for use in the exchange.
+    private_key = parameters.generate_private_key()
+    
+
+    # envoyer la clé publique au centralisateur via un thread
+    print("passerelle: thread créé")
+    m = Thread_DH(private_key.public_key(),ip_desti,"dh/passerelle")
+    print("passerelle: lancement du thread")
+    m.start()
+
+    # lire le contenu du msg
+    # Au début de l'échange la passerelle reçoit une clé factice "start" qui ne sera pas utilisée lors de la dérivation
+    
+    donnees = json.loads(msg.payload.decode("utf-8"))
+    print("donnees:"+str(donnees))
+    peer_public_key=str(donnees["peer_public_key"])
+   
+
+    if peer_public_key != "start" : # la clé recu n'est pas la clé factice
+        
+        print("passerelle: Kc récupéré")
+        shared_key = private_key.exchange(peer_public_key)
+
+        # Perform key derivation
+        derived_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'handshake data',
+            ).derive(shared_key)
+
+        print("passerelle: K="+str(derived_key))
+    #endif
+
+#endef
+
 
 def on_message(client, userdata, msg):
     pass
@@ -243,6 +327,22 @@ def on_cam(client, userdata, msg):
     #endif
 
 #endef
+
+
+def init_dh(): # initie l'échange Diffie Hellman en envoyant la valeur "start" associée à la clé json "perr_public_key"
+    
+    donnees="start"
+    ip_desti="127.0.0.1" #la passerelle s'envoi elle même un msg en faisant croire qu'il vient du centralisateur (pour démarrer l'échange DH)
+    topic="dh/centralisateur"
+
+    print("passerelle: lancement de l'échange Diffie Hellman")
+    m = Thread_DH(donnees,ip_desti,topic)
+    # crée un thread
+    m.start()
+
+#endef
+
+
 def on_denm(client, userdata, msg):
     print("\n##########DENM détecté##########")
     donnees = json.loads(msg.payload.decode("utf-8"))
@@ -460,6 +560,7 @@ if __name__ == "__main__":
     client.message_callback_add("cam/#", on_cam)
     client.message_callback_add("denm/#", on_denm)
     client.message_callback_add("config/#", on_config)
+    client.message_callback_add("dh/#", on_dh)
 
     client.connect('127.0.0.1', 1883, 60)
 
@@ -470,5 +571,6 @@ if __name__ == "__main__":
     client.subscribe("denm/auto")
     client.subscribe("denm/moto")
     client.subscribe("denm/camion")
+    client.subscribe("dh/centralisateur")
 
     client.loop_forever()
