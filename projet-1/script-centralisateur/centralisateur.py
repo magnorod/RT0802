@@ -6,43 +6,33 @@ from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 class Thread_DH (threading.Thread):
-    def __init__(self, donnees, ip_desti, topic):
+    def __init__(self, dictionnaire, ip_desti, topic):
         threading.Thread.__init__(self)
-        self.donnees = donnees
+        self.dictionnaire = dictionnaire
         self.ip_desti = ip_desti
         self.topic = topic
     #endef
 
     def run(self):
-        
-        print("##########EXECUTION D'UN THREAD##########")
-
-        print("thread(passerelle): donnees="+str(self.donnees))
-        print("thread(passerelle): ip_desti="+str(self.ip_desti))
-
-        print("cle_publique_dh="+str(self.donnees))
-        # cle_publique_dh_b64_bytes=base64.b64encode(self.donnees)
-        # cle_publique_dh_b64=cle_publique_dh_b64_bytes.decode("ascii")
-
-
-         # création du dictionnaire
-        dictionnaire = {"cle_publique_dh":self.donnees}
+        print("########## EXECUTION D'UN THREAD##########")
+        print("thread: donnees="+str(self.dictionnaire))
 
         #conversion du dictionnaire en json
-        donneesJson = json.dumps(dictionnaire)
+        donneesJson = json.dumps(self.dictionnaire)
+        print("thread: dictionnaire converti au format json")
+        
+        #envoi du message
         cmd="mosquitto_pub -h "+self.ip_desti+" -q 1 -u 1 -t "+self.topic+" -m '"+str(donneesJson)+"'"
         try:
             os.system(cmd)
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)
-
-        print("thread(passerelle): cmd="+str(cmd))
-        print("thread(passerelle): clé publique Diffie Hellman envoyée à la passerelle")
-
+        print("thread: donneesJson envoyées="+str(donneesJson))
+        print("########## FIN THREAD##########")
     #endef
-
 #endclass
+
 
 def on_message(client, userdata, msg):
     pass
@@ -69,7 +59,7 @@ def on_denm(client, userdata, msg):
 
 
 def on_dh_alpha_p(client, userdata, msg):
-
+    
     print("centralisateur: demande d'échange Diffie-Hellman  de la passerelle reçu")
 
      # récupérer alpha et p 
@@ -88,14 +78,14 @@ def on_dh_alpha_p(client, userdata, msg):
     f.write(str(p))
     f.close()
 
-#endef
+    print("info: alpha et p ont été récupérées")
 
-
-def on_dh(client, userdata, msg):
     ip_desti="192.168.3.38"
 
+
     # générer une clé secrète b
-    b=random.randint(10**10,10**100)
+    b=random.randint(10**1,10**3)
+    print("info: clé secrète généré")
 
     # lecture d'alpha et p qui sont sur le disque
     f = open('alpha.txt', "r")
@@ -108,10 +98,12 @@ def on_dh(client, userdata, msg):
     p=int(var)
     f.close()
 
+    print("info: début calcul clé intermédiaire")
     # calculer la clé intermédiaire Kp (K de passerelle)
     Kc= ((alpha)**b) % p
+    print("info: clé intermédiaire calculée")
 
-    # écriture de a sur le disque
+    # écriture de b sur le disque
     f = open('b.txt', "w")
     f.write(str(b))
     f.close()
@@ -119,15 +111,17 @@ def on_dh(client, userdata, msg):
     # création du dictionnaire contenant la clé intermédiaire
     dictionnaire = {"cle_intermediaire":Kc}
 
-
     # envoyer la clé intermédiaire au partenaire
     m = Thread_DH(dictionnaire,ip_desti,"dh/cle_intermediaire")
     print("passerelle: lancement du thread")
     m.start()
 
+    print("info: clé intermédiaire envoyée au partenaire de l'échange")
+
 #endef
 
 def on_dh_cle_intermediaire(client, userdata, msg):
+    print("info: dans on_dh_cle_intermediaire")
 
     # récupérer b qui est sur le disque 
     f = open('b.txt', "r")
@@ -135,17 +129,24 @@ def on_dh_cle_intermediaire(client, userdata, msg):
     b=int(var)
     f.close()
 
+    f = open('p.txt', "r")
+    var=f.read()
+    p=int(var)
+    f.close()
+
     # récupérer la clé intermédiaire du partenaire Kp (K de la passerelle)
     donnees = json.loads(msg.payload.decode("utf-8"))
     Kp=donnees["cle_intermediaire"]
 
+    print("info: clé intermédiaire du partenaire récupérée")
+
     # calculer le secret partagé
-    K=Kp**b
+    K=(Kp**b)%p
 
     print("info: secret partagé K="+str(K))
 
     # Nettoyage
-    cmd="rm cle_intermediaire.txt a.txt p.txt alpha.txt"
+    cmd="rm b.txt p.txt alpha.txt"
     try:
         os.system(cmd)
     except Exception as e:
@@ -176,7 +177,6 @@ if __name__ == "__main__":
     client.connect("localhost", 1883, 60)
 
     client.subscribe("denm/passerelle")
-
 
     client.subscribe("dh/cle_intermediaire")
     client.subscribe("dh/alpha_p")

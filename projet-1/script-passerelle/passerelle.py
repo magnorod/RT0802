@@ -27,41 +27,31 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 #     #endef
 
 class Thread_DH (threading.Thread):
-    def __init__(self, donnees, ip_desti, topic):
+    def __init__(self, dictionnaire, ip_desti, topic):
         threading.Thread.__init__(self)
-        self.donnees = donnees
+        self.dictionnaire = dictionnaire
         self.ip_desti = ip_desti
         self.topic = topic
     #endef
 
     def run(self):
-        
-        print("##########EXECUTION D'UN THREAD##########")
-        print("thread(passerelle): donnees="+str(self.donnees))
-        print("thread(passerelle): ip_desti="+str(self.ip_desti))
-
-        
-        #encodage en base 64 de la clé publique Diffie Hellman 
-
-        print("cle_publique_dh="+str(self.donnees))
-       
-
-        # création du dictionnaire
-        dictionnaire = {"cle_publique_dh":cle_publique_dh_b64}
+        print("########## EXECUTION D'UN THREAD##########")
+        print("thread: donnees="+str(self.dictionnaire))
 
         #conversion du dictionnaire en json
-        donneesJson = json.dumps(dictionnaire)
+        donneesJson = json.dumps(self.dictionnaire)
+        print("thread: dictionnaire converti au format json")
+        
+        #envoi du message
         cmd="mosquitto_pub -h "+self.ip_desti+" -q 1 -u 1 -t "+self.topic+" -m '"+str(donneesJson)+"'"
         try:
             os.system(cmd)
         except Exception as e:
             sys.stderr.write(e.message+"\n")
             exit(1)
-
-        print("thread(passerelle): cmd="+str(cmd))
-        print("thread(passerelle): clé publique Diffie Hellman envoyée au centralisateur")
+        print("thread: donneesJson envoyées="+str(donneesJson))
+        print("########## FIN THREAD##########")
     #endef
-
 #endclass
 
 def recuperer_cle_publique(keypair,cle_pub):
@@ -113,10 +103,14 @@ def generer_nb_premier(min,max):
 #endef
 
 def init_dh(ip_desti):
+    
+    print("info: lancement de l'échange Diffie Hellman")
 
-    # générer 2 nb premiers tel que alpha < p
-    alpha=generer_nb_premier(10**1000,10*2000)
-    p=generer_nb_premier(10**2001,10**3000)
+    # générer 2 nb premiers tel que alpha < p  p de taille 2048 bits (de l'ordre de 600 chiffres en écriture décimale)
+    alpha=generer_nb_premier(10**500,10**600)
+    p=generer_nb_premier(10**601,10**700)
+
+    print("info: alpha et p généré ")
 
     # écriture d'alpha et p sur le disque
     f = open('alpha.txt', "w")
@@ -131,37 +125,38 @@ def init_dh(ip_desti):
     dictionnaire = {"alpha":alpha,"p":p}
 
     # envoyer alpha et p au partenaire de l'échange Diffie Hellman ( car alpha et p doivent être les mêmes pour les 2 partenaires de l'échange DH)
-    print("passerelle: lancement de l'échange Diffie Hellman")
+    
     m = Thread_DH(dictionnaire,ip_desti,"dh/alpha_p")
-    # crée un thread
     m.start()
 
-#endef
-
-
-def on_dh(client, userdata, msg):
-
-    # print("passerelle: demande d'échange Diffie-Hellman du centralisateur reçu")
-    ip_desti="192.168.3.41"
+    print("info: alpha et p envoyés")
 
 
     # générer une clé secrète a
-    a=random.randint(10**10,10**100)
+    a=random.randint(10**1,10**3)
+    
+    print("info: clé secrète généré")
 
     # lecture d'alpha et p qui sont sur le disque
     f = open('alpha.txt', "r")
     var=f.read()
     alpha=int(var)
     f.close()
+    print("info: lecture d'alpha sur le disque")
 
     f = open('p.txt', "r")
     var=f.read()
     p=int(var)
     f.close()
+    print("info: lecture de p sur le disque")
 
+
+    print("info: début calcul clé intermédiaire")
     # calculer la clé intermédiaire Kp (K de passerelle)
-    Kp= ((alpha)**a) % p
-    
+    Kp= (alpha**a)%p
+    print("info: clé intermédiaire calculée")
+    print("info: Kp=")
+    print(Kp)
 
     # écriture de a sur le disque
     f = open('a.txt', "w")
@@ -172,27 +167,38 @@ def on_dh(client, userdata, msg):
     dictionnaire = {"cle_intermediaire":Kp}
 
     # envoyer la clé intermédiaire au partenaire
-    print("passerelle: thread créé")
+    print("info: thread créé")
     m = Thread_DH(dictionnaire,ip_desti,"dh/cle_intermediaire")
-    print("passerelle: lancement du thread")
+    print("info: lancement du thread")
     m.start()
+
+    print("info: clé intermédiaire envoyée au partenaire de l'échange")
 
 #endef
 
 def on_dh_cle_intermediaire(client, userdata, msg):
-
+    print("info: dans on_dh_cle_intermediaire ")
     # récupérer a qui est sur le disque 
     f = open('a.txt', "r")
     var=f.read()
     a=int(var)
     f.close()
 
+    f = open('p.txt', "r")
+    var=f.read()
+    p=int(var)
+    f.close()
+
     # récupérer la clé intermédiaire du partenaire Kc (K du centralisateur)
     donnees = json.loads(msg.payload.decode("utf-8"))
+    print("info: données récup:")
+    print(donnees)
     Kc=donnees["cle_intermediaire"]
 
+    print("info: clé intermédiaire du partenaire récupérée")
+
     # calculer le secret partagé
-    K=Kc**a
+    K=(Kc**a)%p
 
     print("info: secret partagé K="+str(K))
 
@@ -614,6 +620,7 @@ def on_config(client, userdata, msg):
 if __name__ == "__main__":
 
     ip_autorite="192.168.3.40"
+    ip_centralisateur="192.168.3.41"
 
     random.seed()
 
@@ -627,9 +634,13 @@ if __name__ == "__main__":
     client.message_callback_add("cam/#", on_cam)
     client.message_callback_add("denm/#", on_denm)
     client.message_callback_add("config/#", on_config)
-    client.message_callback_add("dh/#", on_dh)
+    client.message_callback_add("dh/cle_intermediaire", on_dh_cle_intermediaire)
+    
 
     client.connect('127.0.0.1', 1883, 60)
+
+
+    client.subscribe("dh/cle_intermediaire")
 
     client.subscribe("config/certificatX509")
     client.subscribe("cam/auto")
@@ -638,29 +649,11 @@ if __name__ == "__main__":
     client.subscribe("denm/auto")
     client.subscribe("denm/moto")
     client.subscribe("denm/camion")
-    client.subscribe("dh/centralisateur")
+
 
     # déclenchement de l'échange Diffie Hellman avec la passerelle
     time.sleep(2)
-    #init_dh()
-
-     # Generate some parameters. These can be reused.
-    parameters = dh.generate_parameters(generator=2, key_size=2048)
-
-    # Generate a private key for use in the exchange.
-    private_key = parameters.generate_private_key()
-
-    # récupère la clé publique
-    public_key=private_key.public_key()
-
-    print("info: le type public_key est "+str(type(public_key)))
-
-    # serialisation
-    public_key_encode=public_key.public_bytes("PEM","PKCS3")
-
-    print("info: la clé publique a été encodée")
-
-    print("info: le type public_key_encode est "+str(type(public_key_encode)))
+    init_dh(ip_centralisateur)
     print("info: en attente de requête")
 
     client.loop_forever()
