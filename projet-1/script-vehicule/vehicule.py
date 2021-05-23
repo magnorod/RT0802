@@ -7,8 +7,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-# initialisation graine random
-random.seed()
+
 
 def generer_csr():
 
@@ -178,6 +177,8 @@ def gen_msg_cam(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,
 
 #endef
 
+
+
 def gen_msg_denm(stationId,stationType,longitude,latitude,vitesse,ip_server_mqtt,timestamp):
 
     # génération cause
@@ -309,9 +310,6 @@ def scenario2 (stationId,stationType,vitesse,heading,latitude,longitude,timestam
     json_dictionnaire_data=json.dumps(dictionnaire_data)
 
 
-
-
-
     ### SIGNATURE
 
     # hachage sha1 puis signature du json
@@ -381,9 +379,6 @@ def scenario2 (stationId,stationType,vitesse,heading,latitude,longitude,timestam
 #endef
 
     
-
-
-#endef
 
 
 
@@ -480,6 +475,9 @@ def signer_hash_sha1_message(message):
 #endef 
 
 if __name__ == '__main__' :
+
+    # initialisation graine random
+    random.seed()
 
     #definitions des variables
     ip_autorite="192.168.3.35"
